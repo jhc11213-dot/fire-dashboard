@@ -44,7 +44,7 @@ def init_connection():
 
 try:
     client = init_connection()
-    sheet = client.open_by_url("1XMHkq1ffHRRQ1J-qzGZV76ELQfXjs6icr3a6cg8o6b4")
+    sheet = client.open_by_key("1XMHkq1ffHRRQ1J-qzGZV76ELQfXjs6icr3a6cg8o6b4")
 except Exception as e:
     st.error("🚨 구글 스프레드시트 연동 실패! 엑셀 이름이 'fire_db'가 맞는지, 서비스 계정을 편집자로 초대했는지 확인해 줘.")
     st.stop()
