@@ -98,7 +98,17 @@ def load_study_data():
         "em_theory": 0, "em_review": 0, "em_prob": 0
     }
 
-# 📊 [추가됨] 최근값과 평균값을 계산해주는 헬퍼 함수
+def load_plan_data():
+    ws = sheet.worksheet("Plan")
+    data = ws.get_all_values()
+    cols = ["날짜", "월간목표", "주간목표", "일간계획"]
+    if len(data) <= 1:
+        if not data: ws.append_row(cols)
+        return pd.DataFrame(columns=cols)
+    df = pd.DataFrame(data[1:], columns=data[0])
+    return df
+
+# 📊 최근값과 평균값을 계산해주는 헬퍼 함수
 def get_latest_and_avg(df, col_name, default_val):
     if df.empty or col_name not in df.columns or df[col_name].dropna().empty:
         return default_val, 0.0
@@ -110,7 +120,6 @@ st.markdown("<h1 style='text-align: center; font-size: 32px; color: #FF4B4B;'>�
 d_day = (date(2027, 3, 6) - date.today()).days
 df_run = load_run_data()
 
-# 체중과 VO2Max 평균 대비 성과 계산
 last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
 last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 46.0)
 
@@ -119,13 +128,12 @@ vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
 
 col_m1, col_m2, col_m3 = st.columns(3)
 col_m1.metric(label="소방 시험", value=f"D-{d_day}")
-# 체중은 마이너스가 초록색이 되도록 delta_color="inverse" 적용
 col_m2.metric(label="최근 체중", value=f"{last_weight:.1f}kg", delta=f"{weight_delta:.1f}kg (평균대비)", delta_color="inverse")
 col_m3.metric(label="VO2 Max", value=f"{last_vo2:.1f}", delta=f"{vo2_delta:.1f} (평균대비)")
 st.write("---")
 
-# --- 탭 구성 ---
-tab1, tab2, tab3, tab4 = st.tabs(["📚 필기", "🏃 러닝", "🏋️ 체력", "📋 피드백"])
+# --- 탭 구성 (플래너 추가) ---
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📚 필기", "🏃 러닝", "🏋️ 체력", "📋 피드백", "📅 플래너"])
 
 # TAB 1: 필기 진도
 with tab1:
@@ -292,7 +300,6 @@ with tab2:
 with tab3:
     df_gym = load_gym_data()
     
-    # 📊 체력 학원 종목별 평균 대비 성과 요약 패널
     if not df_gym.empty:
         st.markdown("#### 🏆 최근 측정 기록 (평균 대비)")
         last_grip, avg_grip = get_latest_and_avg(df_gym, '악력', 0)
@@ -373,6 +380,80 @@ with tab4:
 - 케이던스: {safe_cadence}spm
 - 메모: {feedback_memo}"""
     st.code(feedback_text, language="markdown")
+
+# TAB 5: 📅 플래너 & 체크리스트 (신규 추가!)
+with tab5:
+    st.markdown("<h2 style='color: #F39C12;'>📅 목표 & 체크리스트</h2>", unsafe_allow_html=True)
+    plan_date = st.date_input("🗓️ 날짜 선택 (과거 기록 조회/수정 가능)", date.today(), key="plan_date")
+
+    df_plan = load_plan_data()
+    
+    # 선택한 날짜의 기존 데이터 불러오기
+    existing_row = df_plan[df_plan['날짜'] == str(plan_date)]
+    if not existing_row.empty:
+        month_g = existing_row.iloc[-1]['월간목표']
+        week_g = existing_row.iloc[-1]['주간목표']
+        daily_json = existing_row.iloc[-1]['일간계획']
+        try: daily_tasks = json.loads(daily_json) if daily_json else {}
+        except: daily_tasks = {}
+    else:
+        month_g = ""
+        week_g = ""
+        daily_tasks = {}
+
+    st.markdown("#### 🎯 이번 달 & 이번 주 목표")
+    month_goal = st.text_area("🏆 월간 목표", value=month_g, placeholder="예: 소방학 1회독 완강, 체중 79kg 진입")
+    week_goal = st.text_area("🎯 주간 목표", value=week_g, placeholder="예: 기출 3회차 풀기, 5km 런닝 2회")
+    
+    st.write("---")
+    st.markdown("#### ✅ 일간 체크리스트 (오늘 할 일)")
+    
+    tasks = []
+    checks = []
+    existing_keys = list(daily_tasks.keys())
+    
+    # 5개의 체크리스트 입력칸 제공
+    for i in range(5):
+        default_task = existing_keys[i] if i < len(existing_keys) else ""
+        default_check = daily_tasks.get(default_task, False) if default_task else False
+        
+        c_chk, c_txt = st.columns([1, 6])
+        with c_chk:
+            is_done = st.checkbox("완료", value=default_check, key=f"chk_{i}", label_visibility="collapsed")
+        with c_txt:
+            task_name = st.text_input(f"할 일 {i+1}", value=default_task, label_visibility="collapsed", key=f"task_{i}", placeholder=f"할 일 {i+1} 입력")
+        
+        if task_name.strip():
+            tasks.append(task_name.strip())
+            checks.append(is_done)
+            
+    # 달성률 프로그레스 바 계산
+    completed_count = sum(checks)
+    total_count = len(tasks)
+    progress_ratio = completed_count / total_count if total_count > 0 else 0.0
+    
+    st.write("<br>", unsafe_allow_html=True)
+    st.progress(progress_ratio)
+    st.write(f"**오늘의 달성률: {int(progress_ratio * 100)}%** ({completed_count}/{total_count})")
+    
+    if st.button("💾 플래너 저장", use_container_width=True):
+        new_daily_dict = {tasks[i]: checks[i] for i in range(len(tasks))}
+        row_data = [str(plan_date), month_goal, week_goal, json.dumps(new_daily_dict, ensure_ascii=False)]
+        
+        ws_plan = sheet.worksheet("Plan")
+        try:
+            # 해당 날짜가 이미 있으면 덮어쓰기 (중복 저장 방지)
+            cell = ws_plan.find(str(plan_date), in_column=1)
+            ws_plan.update_cell(cell.row, 1, row_data[0])
+            ws_plan.update_cell(cell.row, 2, row_data[1])
+            ws_plan.update_cell(cell.row, 3, row_data[2])
+            ws_plan.update_cell(cell.row, 4, row_data[3])
+        except gspread.exceptions.CellNotFound:
+            # 해당 날짜가 없으면 새로 추가
+            ws_plan.append_row(row_data)
+            
+        st.success("✅ 플래너가 저장되었습니다!")
+        st.rerun()
 
 # --- 하단 캐릭터 ---
 st.write("---")
