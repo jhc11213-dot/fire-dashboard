@@ -117,7 +117,7 @@ df_run = load_run_data()
 if not df_run.empty and '체중' in df_run.columns and pd.notnull(df_run['체중'].iloc[-1]):
     last_weight = df_run['체중'].iloc[-1]
 else:
-    last_weight = 75.0
+    last_weight = 81.4
     
 if not df_run.empty and 'VO2Max' in df_run.columns and pd.notnull(df_run['VO2Max'].iloc[-1]):
     last_vo2 = df_run['VO2Max'].iloc[-1]
