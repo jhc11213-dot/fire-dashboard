@@ -25,44 +25,35 @@ span[class*="material"], i, .stIcon, svg {
 }
 
 /* 3. 전체 배경색 */
-.stApp { 
-    background-color: #FFF8E7; 
-}
+.stApp { background-color: #FFF8E7; }
 
 /* 4. 모바일 화면 최적화 (좌우 여백을 줄여서 화면을 넓게 씀) */
 .main .block-container {
     background-color: rgba(255, 255, 255, 0.95);
     border-radius: 15px;
-    padding: 1.5rem 1rem !important; /* 모바일에서 쾌적하도록 좌우 패딩 축소 */
+    padding: 1.5rem 1rem !important; 
     margin-top: 1rem;
     box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
 }
 
 /* 5. 기본 글자 색상 */
-p, div, span, label, h1, h2, h3, h4, h5, h6 { 
-    color: #333333; 
-}
+p, div, span, label, h1, h2, h3, h4, h5, h6 { color: #333333; }
 </style>
 '''
 st.markdown(page_bg_css, unsafe_allow_html=True)
 
 # --- ☁️ 구글 스프레드시트 연동 ---
-@st.cache_resource(ttl=600) # 10분마다 재인증(서버 끊김 방지)
+@st.cache_resource(ttl=600)
 def init_connection():
-    # 여기서 st.secrets["gcp_service_account"] 이름이 완벽하게 맞아야 함
     key_dict = st.secrets["gcp_service_account"]
     creds = Credentials.from_service_account_info(
         key_dict,
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
+        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     )
     return gspread.authorize(creds)
 
 try:
     client = init_connection()
-    # 엑셀 고유 주소(Key)로 완벽하게 연동
     sheet = client.open_by_key("1XMHkq1ffHRRQ1J-qzGZV76ELQfXjs6icr3a6cg8o6b4")
 except Exception as e:
     st.error(f"🚨 구글 스프레드시트 연동 실패! 에러 내용: {e}")
@@ -136,6 +127,13 @@ tab1, tab2, tab3, tab4 = st.tabs(["📚 필기", "🏃 러닝", "🏋️ 체력"
 # TAB 1: 필기 진도
 with tab1:
     study_state = load_study_data()
+    df_mock = load_mock_data()
+    if not df_mock.empty:
+        df_mock['날짜'] = pd.to_datetime(df_mock['날짜'])
+
+    # =========================================
+    # 🚒 소방학개론 섹션
+    # =========================================
     st.markdown("<h2 style='color: #E74C3C;'>🚒 소방학개론</h2>", unsafe_allow_html=True)
     st.markdown("#### 📍 1단계: 이론 강의")
     study_state["fire_theory"] = st.slider("메인 이론 강의 (총 107강)", 0, 107, study_state["fire_theory"])
@@ -169,40 +167,65 @@ with tab1:
     st.markdown("#### 📍 3단계: 기출 및 문제풀이")
     study_state["fire_prob"] = st.number_input("📝 소방학 기출 진행도 (%)", 0, 100, study_state["fire_prob"])
 
+    st.write("---")
+    st.markdown("#### 📍 4단계: 실전 모의고사 (소방학)")
+    c_f1, c_f2 = st.columns(2)
+    with c_f1:
+        f_mock_date = st.date_input("응시 날짜", date.today(), key="f_mock_date")
+        f_mock_round = st.text_input("회차", placeholder="예: 전범위 1회", key="f_mock_round")
+    with c_f2:
+        f_mock_score = st.number_input("점수", min_value=0, max_value=100, value=80, step=5, key="f_mock_score")
+    f_mock_memo = st.text_area("메모", placeholder="오답 노트 / 약점 파악 등", key="f_mock_memo", label_visibility="collapsed")
+    
+    if st.button("💾 소방학 모의고사 저장", use_container_width=True, key="f_mock_btn"):
+        sheet.worksheet("Mock").append_row([str(f_mock_date), "소방학개론", f_mock_round, f_mock_score, f_mock_memo])
+        st.success("✅ 소방학 점수 저장 완료!")
+        
+    if not df_mock.empty:
+        df_fire = df_mock[df_mock['과목'] == '소방학개론']
+        if not df_fire.empty:
+            st.line_chart(df_fire.groupby('날짜')['점수'].mean())
+            with st.expander("📋 소방학 모의고사 전체 기록"): st.dataframe(df_fire.sort_values(by="날짜", ascending=False))
+
+
     st.write("<br><br>", unsafe_allow_html=True)
+    
+    # =========================================
+    # 🚑 응급처치학개론 섹션
+    # =========================================
     st.markdown("<h2 style='color: #3498DB;'>🚑 응급처치학개론</h2>", unsafe_allow_html=True)
     st.markdown("#### 📍 단계별 진도")
     study_state["em_theory"] = st.number_input("1. 이론 강의 완료 수", 0, 200, study_state["em_theory"])
     study_state["em_review"] = st.number_input("2. 전체 복습 회독 수", 0, 50, study_state["em_review"])
     study_state["em_prob"] = st.number_input("3. 기출/문제풀이 진행도 (%)", 0, 100, study_state["em_prob"])
 
-    st.write("<br>", unsafe_allow_html=True)
-    if st.button("💾 필기 진도 클라우드 저장", use_container_width=True):
-        sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
-        st.success("✅ 공부 진도가 구글 엑셀에 저장되었습니다!")
-        
     st.write("---")
-    st.markdown("<h2 style='color: #9B59B6;'>💯 4단계: 실전 모의고사</h2>", unsafe_allow_html=True)
-    c_mock1, c_mock2 = st.columns(2)
-    with c_mock1:
-        mock_date = st.date_input("응시 날짜", date.today(), key="mock_date")
-        mock_sub = st.selectbox("과목", ["소방학개론", "응급처치학개론"])
-    with c_mock2:
-        mock_round = st.text_input("모의고사 회차", placeholder="예: 전범위 1회")
-        mock_score = st.number_input("점수", min_value=0, max_value=100, value=80, step=5)
-    mock_memo = st.text_area("모의고사 메모", placeholder="오답 노트 / 약점 파악 등 기입", label_visibility="collapsed")
+    st.markdown("#### 📍 4단계: 실전 모의고사 (응급처치학)")
+    c_e1, c_e2 = st.columns(2)
+    with c_e1:
+        e_mock_date = st.date_input("응시 날짜", date.today(), key="e_mock_date")
+        e_mock_round = st.text_input("회차", placeholder="예: 전범위 1회", key="e_mock_round")
+    with c_e2:
+        e_mock_score = st.number_input("점수", min_value=0, max_value=100, value=80, step=5, key="e_mock_score")
+    e_mock_memo = st.text_area("메모", placeholder="오답 노트 / 약점 파악 등", key="e_mock_memo", label_visibility="collapsed")
     
-    if st.button("💾 모의고사 점수 저장", use_container_width=True):
-        new_mock = [str(mock_date), mock_sub, mock_round, mock_score, mock_memo]
-        sheet.worksheet("Mock").append_row(new_mock)
-        st.success("✅ 모의고사 점수 저장 완료!")
+    if st.button("💾 응급처치 모의고사 저장", use_container_width=True, key="e_mock_btn"):
+        sheet.worksheet("Mock").append_row([str(e_mock_date), "응급처치학개론", e_mock_round, e_mock_score, e_mock_memo])
+        st.success("✅ 응급처치 점수 저장 완료!")
         
-    df_mock = load_mock_data()
     if not df_mock.empty:
-        df_mock['날짜'] = pd.to_datetime(df_mock['날짜'])
-        chart_data = df_mock.pivot_table(index='날짜', columns='과목', values='점수', aggfunc='mean')
-        st.line_chart(chart_data)
-        with st.expander("📋 모의고사 전체 기록 보기"): st.dataframe(df_mock.sort_values(by="날짜", ascending=False))
+        df_em = df_mock[df_mock['과목'] == '응급처치학개론']
+        if not df_em.empty:
+            st.line_chart(df_em.groupby('날짜')['점수'].mean())
+            with st.expander("📋 응급처치 모의고사 전체 기록"): st.dataframe(df_em.sort_values(by="날짜", ascending=False))
+
+    st.write("<br><br>", unsafe_allow_html=True)
+    
+    # 1~3단계 진도 클라우드 저장 버튼 (맨 아래로 분리)
+    st.info("💡 위에서 체크한 1~3단계(이론/회독/기출) 진도를 저장하려면 아래 버튼을 누르세요.")
+    if st.button("💾 전체 1~3단계 진도 클라우드 저장", use_container_width=True):
+        sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
+        st.success("✅ 진도가 구글 엑셀에 저장되었습니다!")
 
 # TAB 2: 러닝 기록
 with tab2:
@@ -280,7 +303,6 @@ with tab4:
     try: feedback_memo = run_memo
     except NameError: feedback_memo = ""
     
-    # 여기서 duty_type 등 변수가 아직 선언 안 됐을 수 있으니 기본값 처리
     safe_duty = duty_type if 'duty_type' in locals() else "기록 없음"
     safe_weight = weight if 'weight' in locals() else "기록 없음"
     safe_vo2 = vo2max if 'vo2max' in locals() else "기록 없음"
