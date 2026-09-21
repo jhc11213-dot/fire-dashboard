@@ -32,7 +32,7 @@ st.markdown(page_bg_css, unsafe_allow_html=True)
 # --- ☁️ 구글 스프레드시트 연동 ---
 @st.cache_resource(ttl=600) # 10분마다 재인증(서버 끊김 방지)
 def init_connection():
-    key_dict = json.loads(st.secrets["gcp_service_account_json"])
+    key_dict = st.secrets["gcp_service_account"]
     creds = Credentials.from_service_account_info(
         key_dict,
         scopes=[
