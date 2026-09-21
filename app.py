@@ -101,12 +101,23 @@ def load_study_data():
 def load_plan_data():
     ws = sheet.worksheet("Plan")
     data = ws.get_all_values()
-    # 💡 월/주/일 구분을 위해 구조 업그레이드
     cols = ["구분", "지정일", "내용"]
     if len(data) <= 1:
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
     df = pd.DataFrame(data[1:], columns=data[0])
+    return df
+
+# ⏱️ 순공시간 데이터 로드 함수 추가
+def load_study_time_data():
+    ws = sheet.worksheet("StudyTime")
+    data = ws.get_all_values()
+    cols = ["날짜", "순공시간", "메모"]
+    if len(data) <= 1:
+        if not data: ws.append_row(cols)
+        return pd.DataFrame(columns=cols)
+    df = pd.DataFrame(data[1:], columns=data[0])
+    if '순공시간' in df.columns: df['순공시간'] = pd.to_numeric(df['순공시간'], errors='coerce')
     return df
 
 def get_latest_and_avg(df, col_name, default_val):
@@ -137,6 +148,33 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["📚 필기", "🏃 러닝", "🏋️ �
 
 # TAB 1: 필기 진도
 with tab1:
+    # ⏱️ 1. 캠스터디 순공시간 기능
+    st.markdown("<h2 style='color: #27AE60;'>⏱️ 일일 순공 시간 (캠스터디)</h2>", unsafe_allow_html=True)
+    df_study_time = load_study_time_data()
+    
+    if not df_study_time.empty and '날짜' in df_study_time.columns:
+        df_study_time['날짜'] = pd.to_datetime(df_study_time['날짜'], errors='coerce')
+        st.markdown("#### 📊 최근 순공 시간 추이")
+        # 날짜별로 그룹화해서 막대그래프로 띄우기
+        chart_data = df_study_time.groupby('날짜')['순공시간'].sum()
+        st.bar_chart(chart_data)
+        
+    c_t1, c_t2, c_t3 = st.columns([1, 1, 2])
+    with c_t1:
+        st_date = st.date_input("공부 날짜", date.today(), key="st_date")
+    with c_t2:
+        st_hours = st.number_input("순공 시간 (시간)", min_value=0.0, max_value=24.0, value=8.0, step=0.5, key="st_hours")
+    with c_t3:
+        st_memo = st.text_input("메모", placeholder="집중도, 특이사항 (예: 5시간 풀집중)", key="st_memo")
+        
+    if st.button("💾 순공 시간 저장", use_container_width=True):
+        sheet.worksheet("StudyTime").append_row([str(st_date), st_hours, st_memo])
+        st.success(f"✅ {st_date} 순공시간 {st_hours}시간 저장 완료!")
+        st.rerun()
+
+    st.write("---")
+
+    # 📚 2. 기존 필기 과목 진도 및 모의고사
     study_state = load_study_data()
     df_mock = load_mock_data()
     if not df_mock.empty and '날짜' in df_mock.columns:
@@ -343,9 +381,8 @@ with tab5:
     c_m1, c_m2 = st.columns([1, 2])
     with c_m1:
         m_date = st.date_input("기준 월 선택 (달력 터치)", date.today(), key="m_date")
-        m_str = m_date.strftime("%Y년 %m월") # 예: 2026년 9월
+        m_str = m_date.strftime("%Y년 %m월")
     
-    # 엑셀에서 해당 월의 데이터 찾기 (없으면 빈칸)
     df_m = df_plan[(df_plan['구분'] == '월간') & (df_plan['지정일'] == m_str)]
     m_val = df_m.iloc[-1]['내용'] if not df_m.empty else ""
     
@@ -361,7 +398,6 @@ with tab5:
 
     # --- 2. 주간 목표 ---
     st.markdown("#### 🎯 주간 목표")
-    # 달력에서 범위를 선택(시작일과 종료일)
     w_dates = st.date_input("주간 기간 선택 (시작일~종료일 드래그)", [date.today(), date.today()], key="w_date")
     if len(w_dates) == 2:
         w_str = f"{w_dates[0].strftime('%Y/%m/%d')} ~ {w_dates[1].strftime('%Y/%m/%d')}"
