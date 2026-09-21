@@ -30,7 +30,7 @@ span[class*="material"], i, .stIcon, svg {
 /* 차가운 도시 느낌의 쿨 그레이 배경 */
 .stApp { background-color: #F4F6F8; }
 
-/* 메인 컨테이너 (깔끔한 화이트 + 은은한 애플 스타일 그림자) */
+/* 메인 컨테이너 (깔끔한 화이트 + 은은한 그림자) */
 .main .block-container {
     background-color: #FFFFFF;
     border-radius: 16px;
@@ -40,7 +40,7 @@ span[class*="material"], i, .stIcon, svg {
     box-shadow: 0px 8px 30px rgba(0, 0, 0, 0.04);
 }
 
-/* 텍스트 색상 묵직하고 깔끔하게 */
+/* 텍스트 색상 묵직하게 */
 h1, h2, h3, h4, h5, h6 { 
     color: #1A1D20 !important; 
     font-weight: 700 !important; 
@@ -83,7 +83,7 @@ try:
     client = init_connection()
     sheet = client.open_by_key("1XMHkq1ffHRRQ1J-qzGZV76ELQfXjs6icr3a6cg8o6b4")
 except Exception as e:
-    st.error(f"🚨 구글 스프레드시트 연동 실패! 에러 내용: {e}")
+    st.error(f"🚨 연동 실패! 에러: {e}")
     st.stop()
 
 # --- 데이터 읽기/쓰기 함수 ---
@@ -299,13 +299,13 @@ with tab1:
 
     st.markdown("<h3>🚒 소방학개론</h3>", unsafe_allow_html=True)
     st.markdown("#### 1단계: 이론 강의")
-    study_state["fire_theory"] = st.slider("메인 이론 강의 (총 107강)", 0, 107, study_state["fire_theory"])
+    study_state["fire_theory"] = st.slider("메인 이론 강의 (총 107강)", 0, 107, study_state["fire_theory"], key="fire_theory_in")
     st.progress(study_state["fire_theory"] / 107.0)
     
     with st.expander("➕ 서브 강의 추가"):
-        new_sp_name = st.text_input("특강 이름")
-        new_sp_total = st.number_input("총 강의 수", min_value=1, value=10)
-        if st.button("등록", use_container_width=True):
+        new_sp_name = st.text_input("특강 이름", key="new_sp_name")
+        new_sp_total = st.number_input("총 강의 수", min_value=1, value=10, key="new_sp_total")
+        if st.button("등록", use_container_width=True, key="add_sp_btn"):
             if new_sp_name:
                 study_state["fire_special"].append({"name": new_sp_name, "total": new_sp_total, "completed": 0})
                 sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
@@ -327,7 +327,7 @@ with tab1:
 
     st.write("---")
     st.markdown("#### 3단계: 기출/모의고사")
-    study_state["fire_prob"] = st.number_input("기출 진행도 (%)", 0, 100, study_state["fire_prob"])
+    study_state["fire_prob"] = st.number_input("기출 진행도 (%)", 0, 100, study_state["fire_prob"], key="fire_prob_in")
 
     if not df_mock.empty and '과목' in df_mock.columns:
         df_fire = df_mock[df_mock['과목'] == '소방학개론']
@@ -350,9 +350,9 @@ with tab1:
 
     st.write("<br>", unsafe_allow_html=True)
     st.markdown("<h3>🚑 응급처치학개론</h3>", unsafe_allow_html=True)
-    study_state["em_theory"] = st.number_input("이론 완료 수", 0, 200, study_state["em_theory"])
-    study_state["em_review"] = st.number_input("복습 회독 수", 0, 50, study_state["em_review"])
-    study_state["em_prob"] = st.number_input("기출 진행도 (%)", 0, 100, study_state["em_prob"])
+    study_state["em_theory"] = st.number_input("이론 완료 수", 0, 200, study_state["em_theory"], key="em_theory_in")
+    study_state["em_review"] = st.number_input("복습 회독 수", 0, 50, study_state["em_review"], key="em_review_in")
+    study_state["em_prob"] = st.number_input("기출 진행도 (%)", 0, 100, study_state["em_prob"], key="em_prob_in")
 
     if not df_mock.empty and '과목' in df_mock.columns:
         df_em = df_mock[df_mock['과목'] == '응급처치학개론']
@@ -374,7 +374,7 @@ with tab1:
         st.rerun()
 
     st.write("<br>", unsafe_allow_html=True)
-    if st.button("🔄 전체 진도 동기화", use_container_width=True):
+    if st.button("🔄 전체 진도 동기화", use_container_width=True, key="sync_btn"):
         sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
         st.success("✅ 클라우드 저장 완료!")
 
@@ -382,16 +382,16 @@ with tab1:
 with tab2:
     c1, c2 = st.columns(2)
     with c1:
-        run_date = st.date_input("훈련 날짜", today_kst)
-        weight = st.number_input("체중 (kg)", value=float(last_weight), step=0.1)
-        avg_hr = st.number_input("평균 심박 (bpm)", min_value=60, max_value=200, value=140)
-        cadence = st.number_input("케이던스 (spm)", min_value=100, max_value=250, value=170, step=1)
+        run_date = st.date_input("훈련 날짜", today_kst, key="run_date_in")
+        weight = st.number_input("체중 (kg)", value=float(last_weight), step=0.1, key="run_weight_in")
+        avg_hr = st.number_input("평균 심박 (bpm)", min_value=60, max_value=200, value=140, key="run_avghr_in")
+        cadence = st.number_input("케이던스 (spm)", min_value=100, max_value=250, value=170, step=1, key="run_cadence_in")
     with c2:
-        duty_type = st.selectbox("근무", ["데이", "이브닝", "나이트", "더블 (16시간)", "오프"])
-        vo2max = st.number_input("VO2 Max", value=float(last_vo2), step=0.1)
-        max_hr = st.number_input("최대 심박 (bpm)", min_value=60, max_value=220, value=150)
+        duty_type = st.selectbox("근무", ["데이", "이브닝", "나이트", "더블 (16시간)", "오프"], key="run_duty_in")
+        vo2max = st.number_input("VO2 Max", value=float(last_vo2), step=0.1, key="run_vo2_in")
+        max_hr = st.number_input("최대 심박 (bpm)", min_value=60, max_value=220, value=150, key="run_maxhr_in")
 
-    shoe_used = st.selectbox("러닝화", ["선택 안함", "아디다스 하이퍼부스트 런", "노바 블라스트 5", "아디제로 에보 SL (1)", "아디제로 에보 SL (2)", "클라우드 몬스터 3 하이퍼"])
+    shoe_used = st.selectbox("러닝화", ["선택 안함", "아디다스 하이퍼부스트 런", "노바 블라스트 5", "아디제로 에보 SL (1)", "아디제로 에보 SL (2)", "클라우드 몬스터 3 하이퍼"], key="run_shoe_in")
     
     shoe_img_map = {
         "아디다스 하이퍼부스트 런": "hyperboost.png", 
@@ -404,12 +404,12 @@ with tab2:
         img_filename = shoe_img_map.get(shoe_used)
         if img_filename and os.path.exists(img_filename): st.image(img_filename, width=300)
 
-    target_hr = st.selectbox("훈련 타겟", ["150bpm 미만 (리커버리)", "159bpm 미만 (크루즈)", "자유 훈련"])
-    condition = st.slider("피로도 (1:최악 ~ 5:최상)", 1, 5, 3)
+    target_hr = st.selectbox("훈련 타겟", ["150bpm 미만 (리커버리)", "159bpm 미만 (크루즈)", "자유 훈련"], key="run_target_in")
+    condition = st.slider("피로도 (1:최악 ~ 5:최상)", 1, 5, 3, key="run_cond_in")
     with st.expander("훈련 메모"): 
-        run_memo = st.text_area("메모", label_visibility="collapsed")
+        run_memo = st.text_area("메모", label_visibility="collapsed", key="run_memo_in")
 
-    if st.button("💾 러닝 기록 저장", use_container_width=True):
+    if st.button("💾 러닝 기록 저장", use_container_width=True, key="run_save_btn"):
         if "150bpm" in target_hr and max_hr >= 150: st.error("❌ 심박 타겟 실패 (150+)")
         elif "159bpm" in target_hr and max_hr >= 160: st.error("❌ 심박 타겟 실패 (160+)")
         else: st.success("✅ 훈련 성공")
@@ -443,22 +443,22 @@ with tab3:
     st.markdown("#### 실시간 환산 점수")
     c_gym1, c_gym2 = st.columns(2)
     with c_gym1:
-        grip = st.number_input("악력 (kg)", value=40.0, step=0.1)
-        sit_reach = st.number_input("좌전굴 (cm)", value=10.0, step=0.1)
-        shuttle = st.number_input("왕복오래달리기", value=40, step=1)
+        grip = st.number_input("악력 (kg)", value=40.0, step=0.1, key="gym_grip_in")
+        sit_reach = st.number_input("좌전굴 (cm)", value=10.0, step=0.1, key="gym_sit_in")
+        shuttle = st.number_input("왕복오래달리기", value=40, step=1, key="gym_shut_in")
     with c_gym2:
-        back_str = st.number_input("배근력 (kg)", value=150.0, step=0.1)
-        jump = st.number_input("제자리멀리뛰기 (cm)", value=200, step=1)
-        situp = st.number_input("윗몸일으키기", value=40, step=1)
+        back_str = st.number_input("배근력 (kg)", value=150.0, step=0.1, key="gym_back_in")
+        jump = st.number_input("제자리멀리뛰기 (cm)", value=200, step=1, key="gym_jump_in")
+        situp = st.number_input("윗몸일으키기", value=40, step=1, key="gym_situp_in")
         
     total_score = get_score_grip(grip) + get_score_sit_reach(sit_reach) + get_score_shuttle(shuttle) + get_score_back(back_str) + get_score_jump(jump) + get_score_situp(situp)
     
     st.info(f"🏆 예상 총점: **{total_score}점** / 60점")
         
     with st.expander("강사 피드백"): 
-        gym_memo = st.text_area("메모", label_visibility="collapsed")
+        gym_memo = st.text_area("메모", label_visibility="collapsed", key="gym_memo_in")
 
-    if st.button("💾 체력 기록 저장", use_container_width=True):
+    if st.button("💾 체력 기록 저장", use_container_width=True, key="gym_save_btn"):
         sheet.worksheet("Gym").append_row([str(gym_date), grip, sit_reach, shuttle, jump, back_str, situp, gym_memo])
         st.rerun()
 
@@ -509,7 +509,7 @@ with tab5:
         m_str = m_date.strftime("%Y년 %m월")
     df_m = df_plan[(df_plan['구분'] == '월간') & (df_plan['지정일'] == m_str)]
     m_val = df_m.iloc[-1]['내용'] if not df_m.empty else ""
-    with c_m2: m_goal = st.text_area("내용", value=m_val, label_visibility="collapsed")
+    with c_m2: m_goal = st.text_area("내용", value=m_val, label_visibility="collapsed", key="m_goal_in")
     if st.button("💾 저장", key="btn_m", use_container_width=True):
         sheet.worksheet("Plan").append_row(["월간", m_str, m_goal])
         st.rerun()
@@ -523,7 +523,7 @@ with tab5:
     else: w_str = f"{w_dates[0].strftime('%Y/%m/%d')} ~ (-)"
     df_w = df_plan[(df_plan['구분'] == '주간') & (df_plan['지정일'] == w_str)]
     w_val = df_w.iloc[-1]['내용'] if not df_w.empty else ""
-    w_goal = st.text_area("내용", value=w_val, label_visibility="collapsed")
+    w_goal = st.text_area("내용", value=w_val, label_visibility="collapsed", key="w_goal_in")
     if st.button("💾 저장", key="btn_w", use_container_width=True):
         sheet.worksheet("Plan").append_row(["주간", w_str, w_goal])
         st.rerun()
