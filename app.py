@@ -5,7 +5,11 @@ import json
 import gspread
 import random
 from google.oauth2.service_account import Credentials
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
+
+# --- 🇰🇷 한국 시간(KST) 설정 ---
+KST = timezone(timedelta(hours=9))
+today_kst = datetime.now(KST).date()
 
 # 기본 세팅
 st.set_page_config(page_title="2027 소방 컨트롤 타워", layout="centered")
@@ -218,11 +222,12 @@ quotes = [
 ]
 st.markdown(f"<p style='text-align: center; color: #7F8C8D; font-style: italic; font-size: 16px;'>\"{random.choice(quotes)}\"</p>", unsafe_allow_html=True)
 
-d_day = (date(2027, 3, 6) - date.today()).days
+# 💡 D-Day에도 한국 시간 반영
+d_day = (date(2027, 3, 6) - today_kst).days
 df_run = load_run_data()
 
 last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
-last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 45.0)
+last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 46.0)
 
 weight_delta = last_weight - avg_weight if avg_weight != 0 else 0
 vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
@@ -249,7 +254,7 @@ with tab1:
         
     c_t1, c_t2, c_t3 = st.columns([1, 1, 2])
     with c_t1:
-        st_date = st.date_input("공부 날짜", date.today(), key="st_date")
+        st_date = st.date_input("공부 날짜", today_kst, key="st_date")
     with c_t2:
         st_hours = st.number_input("순공 시간 (시간)", min_value=0.0, max_value=24.0, value=8.0, step=0.5, key="st_hours")
     with c_t3:
@@ -312,7 +317,7 @@ with tab1:
 
     c_f1, c_f2 = st.columns(2)
     with c_f1:
-        f_mock_date = st.date_input("응시 날짜", date.today(), key="f_mock_date")
+        f_mock_date = st.date_input("응시 날짜", today_kst, key="f_mock_date")
         f_mock_round = st.text_input("회차", placeholder="예: 전범위 1회", key="f_mock_round")
     with c_f2:
         f_mock_score = st.number_input("점수", min_value=0, max_value=100, value=80, step=5, key="f_mock_score")
@@ -343,7 +348,7 @@ with tab1:
 
     c_e1, c_e2 = st.columns(2)
     with c_e1:
-        e_mock_date = st.date_input("응시 날짜", date.today(), key="e_mock_date")
+        e_mock_date = st.date_input("응시 날짜", today_kst, key="e_mock_date")
         e_mock_round = st.text_input("회차", placeholder="예: 전범위 1회", key="e_mock_round")
     with c_e2:
         e_mock_score = st.number_input("점수", min_value=0, max_value=100, value=80, step=5, key="e_mock_score")
@@ -363,7 +368,7 @@ with tab1:
 with tab2:
     c1, c2 = st.columns(2)
     with c1:
-        run_date = st.date_input("🗓️ 훈련 날짜", date.today())
+        run_date = st.date_input("🗓️ 훈련 날짜", today_kst)
         weight = st.number_input("⚖️ 체중 (kg)", value=float(last_weight), step=0.1)
         avg_hr = st.number_input("📉 평균 심박 (bpm)", min_value=60, max_value=200, value=140)
         cadence = st.number_input("👣 케이던스 (spm)", min_value=100, max_value=250, value=170, step=1)
@@ -374,7 +379,6 @@ with tab2:
 
     shoe_used = st.selectbox("👟 착용 러닝화 선택", ["선택 안함", "아디다스 하이퍼부스트 런", "노바 블라스트 5", "아디제로 에보 SL (1)", "아디제로 에보 SL (2)", "클라우드 몬스터 3 하이퍼"])
     
-    # 💡 노바 블라스트 5만 .jpg, 나머지는 .png로 매칭!
     shoe_img_map = {
         "아디다스 하이퍼부스트 런": "hyperboost.png", 
         "노바 블라스트 5": "nova5.jpg", 
@@ -421,7 +425,7 @@ with tab3:
         gc3.metric("🏃 왕오달", f"{last_shut}회", f"{last_shut - avg_shut:.1f}회")
         st.write("---")
 
-    gym_date = st.date_input("🗓️ 측정 날짜", date.today(), key="gym_date_tab3")
+    gym_date = st.date_input("🗓️ 측정 날짜", today_kst, key="gym_date_tab3")
     
     st.markdown("#### 🏅 실시간 점수 환산 (남자 기준)")
     c_gym1, c_gym2 = st.columns(2)
@@ -485,7 +489,7 @@ with tab4:
     safe_max = max_hr if 'max_hr' in locals() else "0"
     safe_cadence = cadence if 'cadence' in locals() else "0"
 
-    st.code(f"""[훈련 보고서]\n- 날짜: {date.today()} / 근무: {safe_duty}\n- 체중: {safe_weight}kg / VO2Max: {safe_vo2}\n- 장비: {safe_shoe}\n- 심박: 평균 {safe_avg}bpm / 최대 {safe_max}bpm\n- 케이던스: {safe_cadence}spm\n- 메모: {feedback_memo}""", language="markdown")
+    st.code(f"""[훈련 보고서]\n- 날짜: {today_kst} / 근무: {safe_duty}\n- 체중: {safe_weight}kg / VO2Max: {safe_vo2}\n- 장비: {safe_shoe}\n- 심박: 평균 {safe_avg}bpm / 최대 {safe_max}bpm\n- 케이던스: {safe_cadence}spm\n- 메모: {feedback_memo}""", language="markdown")
 
 # TAB 5: 📅 플래너 & 체크리스트
 with tab5:
@@ -496,7 +500,7 @@ with tab5:
     st.markdown("#### 🏆 월간 목표")
     c_m1, c_m2 = st.columns([1, 2])
     with c_m1:
-        m_date = st.date_input("기준 월 선택 (달력 터치)", date.today(), key="m_date")
+        m_date = st.date_input("기준 월 선택 (달력 터치)", today_kst, key="m_date")
         m_str = m_date.strftime("%Y년 %m월")
     
     df_m = df_plan[(df_plan['구분'] == '월간') & (df_plan['지정일'] == m_str)]
@@ -514,7 +518,7 @@ with tab5:
 
     # --- 2. 주간 목표 ---
     st.markdown("#### 🎯 주간 목표")
-    w_dates = st.date_input("주간 기간 선택 (시작일~종료일 드래그)", [date.today(), date.today()], key="w_date")
+    w_dates = st.date_input("주간 기간 선택 (시작일~종료일 드래그)", [today_kst, today_kst], key="w_date")
     if len(w_dates) == 2:
         w_str = f"{w_dates[0].strftime('%Y/%m/%d')} ~ {w_dates[1].strftime('%Y/%m/%d')}"
     else:
@@ -534,7 +538,7 @@ with tab5:
 
     # --- 3. 일간 체크리스트 ---
     st.markdown("#### ✅ 일간 체크리스트")
-    d_date = st.date_input("날짜 선택 (어제/오늘 등)", date.today(), key="d_date")
+    d_date = st.date_input("날짜 선택 (어제/오늘 등)", today_kst, key="d_date")
     d_str = d_date.strftime("%Y-%m-%d")
     
     df_d = df_plan[(df_plan['구분'] == '일간') & (df_plan['지정일'] == d_str)]
