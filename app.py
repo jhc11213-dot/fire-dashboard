@@ -222,7 +222,7 @@ d_day = (date(2027, 3, 6) - date.today()).days
 df_run = load_run_data()
 
 last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
-last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 46.0)
+last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 45.0)
 
 weight_delta = last_weight - avg_weight if avg_weight != 0 else 0
 vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
