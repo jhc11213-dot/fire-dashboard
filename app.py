@@ -16,6 +16,10 @@ page_bg_css = '''
 html, body, [class*="css"], div, p, span, label, h1, h2, h3, h4, h5, h6 {
     font-family: 'Jua', sans-serif !important;
 }
+/* 스트림릿 기본 화살표/아이콘은 폰트 강제 적용에서 제외 */
+.material-symbols-rounded, .material-icons, .stIcon {
+    font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important;
+}
 .stApp { background-color: #FFF8E7; }
 .main .block-container {
     background-color: rgba(255, 255, 255, 0.95);
