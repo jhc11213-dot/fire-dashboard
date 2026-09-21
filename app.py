@@ -6,28 +6,20 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, date
 
-# 기본 세팅 (모바일 환경에 맞춰 가운데 정렬)
+# 기본 세팅
 st.set_page_config(page_title="2027 소방 컨트롤 타워", layout="centered")
 
-# --- 🎨 디자인 세팅 (모바일 최적화 및 폰트 에러 수정) ---
+# --- 🎨 디자인 세팅 ---
 page_bg_css = '''
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
-
-/* 1. 기본 텍스트에만 주아체 적용 (아이콘이 깨지는 현상 방지) */
 .stApp, p, h1, h2, h3, h4, h5, h6, label, input, button, textarea, li {
     font-family: 'Jua', sans-serif !important;
 }
-
-/* 2. 스트림릿 화살표 및 아이콘은 원래 폰트 유지 (arrow_drop_down 방지) */
 span[class*="material"], i, .stIcon, svg {
     font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important;
 }
-
-/* 3. 전체 배경색 */
 .stApp { background-color: #FFF8E7; }
-
-/* 4. 모바일 화면 최적화 (좌우 여백을 줄여서 화면을 넓게 씀) */
 .main .block-container {
     background-color: rgba(255, 255, 255, 0.95);
     border-radius: 15px;
@@ -35,8 +27,6 @@ span[class*="material"], i, .stIcon, svg {
     margin-top: 1rem;
     box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
 }
-
-/* 5. 기본 글자 색상 */
 p, div, span, label, h1, h2, h3, h4, h5, h6 { color: #333333; }
 </style>
 '''
@@ -63,13 +53,20 @@ except Exception as e:
 def load_run_data():
     ws = sheet.worksheet("Run")
     data = ws.get_all_values()
-    cols = ["날짜", "근무", "컨디션", "체중", "VO2Max", "장비", "타겟", "평균심박", "최대심박", "메모"]
+    # 🏃 케이던스가 추가된 전체 열쇠(컬럼)
+    cols = ["날짜", "근무", "컨디션", "체중", "VO2Max", "장비", "타겟", "평균심박", "최대심박", "케이던스", "메모"]
+    
     if len(data) <= 1:
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
+        
     df = pd.DataFrame(data[1:], columns=data[0])
-    df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
-    df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
+    
+    # KeyError 방지용 안전장치 (열 이름이 존재할 때만 숫자로 변환)
+    if '체중' in df.columns:
+        df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
+    if 'VO2Max' in df.columns:
+        df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
     return df
 
 def load_gym_data():
@@ -80,8 +77,10 @@ def load_gym_data():
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
     df = pd.DataFrame(data[1:], columns=data[0])
+    
     for col in ["악력", "좌전굴", "왕오달", "제멀", "배근력"]:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
 
 def load_mock_data():
@@ -92,7 +91,8 @@ def load_mock_data():
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
     df = pd.DataFrame(data[1:], columns=data[0])
-    df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
+    if '점수' in df.columns:
+        df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
     return df
 
 def load_study_data():
@@ -112,8 +112,17 @@ def load_study_data():
 st.markdown("<h1 style='text-align: center; font-size: 32px; color: #FF4B4B;'>🔥 2027 소방 컨트롤 타워</h1>", unsafe_allow_html=True)
 d_day = (date(2027, 3, 6) - date.today()).days
 df_run = load_run_data()
-last_weight = df_run['체중'].iloc[-1] if not df_run.empty else 75.0
-last_vo2 = df_run['VO2Max'].iloc[-1] if not df_run.empty else 46.0
+
+# 체중/VO2Max 에러 방지 처리
+if not df_run.empty and '체중' in df_run.columns and pd.notnull(df_run['체중'].iloc[-1]):
+    last_weight = df_run['체중'].iloc[-1]
+else:
+    last_weight = 75.0
+    
+if not df_run.empty and 'VO2Max' in df_run.columns and pd.notnull(df_run['VO2Max'].iloc[-1]):
+    last_vo2 = df_run['VO2Max'].iloc[-1]
+else:
+    last_vo2 = 46.0
 
 col_m1, col_m2, col_m3 = st.columns(3)
 col_m1.metric(label="소방 시험", value=f"D-{d_day}")
@@ -128,12 +137,9 @@ tab1, tab2, tab3, tab4 = st.tabs(["📚 필기", "🏃 러닝", "🏋️ 체력"
 with tab1:
     study_state = load_study_data()
     df_mock = load_mock_data()
-    if not df_mock.empty:
-        df_mock['날짜'] = pd.to_datetime(df_mock['날짜'])
+    if not df_mock.empty and '날짜' in df_mock.columns:
+        df_mock['날짜'] = pd.to_datetime(df_mock['날짜'], errors='coerce')
 
-    # =========================================
-    # 🚒 소방학개론 섹션
-    # =========================================
     st.markdown("<h2 style='color: #E74C3C;'>🚒 소방학개론</h2>", unsafe_allow_html=True)
     st.markdown("#### 📍 1단계: 이론 강의")
     study_state["fire_theory"] = st.slider("메인 이론 강의 (총 107강)", 0, 107, study_state["fire_theory"])
@@ -181,18 +187,14 @@ with tab1:
         sheet.worksheet("Mock").append_row([str(f_mock_date), "소방학개론", f_mock_round, f_mock_score, f_mock_memo])
         st.success("✅ 소방학 점수 저장 완료!")
         
-    if not df_mock.empty:
+    if not df_mock.empty and '과목' in df_mock.columns:
         df_fire = df_mock[df_mock['과목'] == '소방학개론']
         if not df_fire.empty:
             st.line_chart(df_fire.groupby('날짜')['점수'].mean())
             with st.expander("📋 소방학 모의고사 전체 기록"): st.dataframe(df_fire.sort_values(by="날짜", ascending=False))
 
-
     st.write("<br><br>", unsafe_allow_html=True)
     
-    # =========================================
-    # 🚑 응급처치학개론 섹션
-    # =========================================
     st.markdown("<h2 style='color: #3498DB;'>🚑 응급처치학개론</h2>", unsafe_allow_html=True)
     st.markdown("#### 📍 단계별 진도")
     study_state["em_theory"] = st.number_input("1. 이론 강의 완료 수", 0, 200, study_state["em_theory"])
@@ -213,15 +215,13 @@ with tab1:
         sheet.worksheet("Mock").append_row([str(e_mock_date), "응급처치학개론", e_mock_round, e_mock_score, e_mock_memo])
         st.success("✅ 응급처치 점수 저장 완료!")
         
-    if not df_mock.empty:
+    if not df_mock.empty and '과목' in df_mock.columns:
         df_em = df_mock[df_mock['과목'] == '응급처치학개론']
         if not df_em.empty:
             st.line_chart(df_em.groupby('날짜')['점수'].mean())
             with st.expander("📋 응급처치 모의고사 전체 기록"): st.dataframe(df_em.sort_values(by="날짜", ascending=False))
 
     st.write("<br><br>", unsafe_allow_html=True)
-    
-    # 1~3단계 진도 클라우드 저장 버튼 (맨 아래로 분리)
     st.info("💡 위에서 체크한 1~3단계(이론/회독/기출) 진도를 저장하려면 아래 버튼을 누르세요.")
     if st.button("💾 전체 1~3단계 진도 클라우드 저장", use_container_width=True):
         sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
@@ -234,12 +234,29 @@ with tab2:
         run_date = st.date_input("🗓️ 훈련 날짜", date.today())
         weight = st.number_input("⚖️ 체중 (kg)", value=float(last_weight), step=0.1)
         avg_hr = st.number_input("📉 평균 심박 (bpm)", min_value=60, max_value=200, value=140)
+        # 🏃 케이던스 입력칸
+        cadence = st.number_input("👣 케이던스 (spm)", min_value=100, max_value=250, value=170, step=1)
     with c2:
         duty_type = st.selectbox("🏥 근무 형태", ["데이", "이브닝", "나이트", "더블 (16시간)", "오프"])
         vo2max = st.number_input("🫀 VO2 Max", value=float(last_vo2), step=0.1)
         max_hr = st.number_input("📈 최대 심박 (bpm)", min_value=60, max_value=220, value=150)
 
     shoe_used = st.selectbox("👟 착용 러닝화 선택", ["선택 안함", "아디다스 하이퍼부스트 런", "노바 블라스트 5", "아디제로 에보 SL (1)", "아디제로 에보 SL (2)", "클라우드 몬스터 3 하이퍼"])
+    shoe_img_map = {
+        "아디다스 하이퍼부스트 런": "hyperboost.jpg", 
+        "노바 블라스트 5": "nova5.jpg", 
+        "아디제로 에보 SL (1)": "evo1.jpg", 
+        "아디제로 에보 SL (2)": "evo2.jpg", 
+        "클라우드 몬스터 3 하이퍼": "cloudmonster.jpg"
+    }
+    
+    if shoe_used != "선택 안함":
+        img_filename = shoe_img_map.get(shoe_used)
+        if img_filename and os.path.exists(img_filename):
+            st.image(img_filename, width=300)
+        else:
+            st.warning(f"💡 깃허브에 '{img_filename}' 파일이 없습니다. 사진을 업로드하면 여기에 나타납니다.")
+
     target_hr = st.selectbox("🎯 훈련 목적", ["150bpm 미만 (리커버리)", "159bpm 미만 (크루즈/존3)", "타겟 없음 (자유 훈련)"])
     condition = st.slider("🔋 주관적 피로도 (1:최악 ~ 5:최상)", 1, 5, 3)
     
@@ -250,19 +267,23 @@ with tab2:
         if "150bpm" in target_hr and max_hr >= 150: st.error("❌ [Fail] 최대 심박 150 오버. 다음엔 파워워킹 전환해.")
         elif "159bpm" in target_hr and max_hr >= 160: st.error("❌ [Fail] 최대 심박 160 오버. 존4 역치 훈련으로 빠짐.")
         else: st.success("✅ [Pass] 심박 통제 완벽함. 훈련 성공.")
-        new_run = [str(run_date), duty_type, condition, weight, vo2max, shoe_used, target_hr, avg_hr, max_hr, run_memo]
+        
+        # 케이던스를 포함해서 엑셀에 저장
+        new_run = [str(run_date), duty_type, condition, weight, vo2max, shoe_used, target_hr, avg_hr, max_hr, cadence, run_memo]
         sheet.worksheet("Run").append_row(new_run)
         st.success("✅ 러닝 기록이 저장되었습니다!")
 
     st.write("---")
     st.markdown("<h3 style='color: #2C3E50;'>📈 러닝 누적 트렌드</h3>", unsafe_allow_html=True)
-    if not df_run.empty:
-        df_run['날짜'] = pd.to_datetime(df_run['날짜'])
+    if not df_run.empty and '날짜' in df_run.columns:
+        df_run['날짜'] = pd.to_datetime(df_run['날짜'], errors='coerce')
         df_run = df_run.sort_values('날짜').set_index('날짜')
-        st.write("**체중 변화 (가벼워지는 몸)**")
-        st.line_chart(df_run['체중'])
-        st.write("**가민 VO2 Max 궤적 (엔진 업그레이드)**")
-        st.line_chart(df_run['VO2Max'])
+        if '체중' in df_run.columns:
+            st.write("**체중 변화 (가벼워지는 몸)**")
+            st.line_chart(df_run['체중'])
+        if 'VO2Max' in df_run.columns:
+            st.write("**가민 VO2 Max 궤적 (엔진 업그레이드)**")
+            st.line_chart(df_run['VO2Max'])
 
 # TAB 3: 체력학원 기록
 with tab3:
@@ -287,15 +308,23 @@ with tab3:
     st.write("---")
     st.markdown("<h3 style='color: #2C3E50;'>📈 종목별 성장 궤적</h3>", unsafe_allow_html=True)
     df_gym = load_gym_data()
-    if not df_gym.empty:
-        df_gym['날짜'] = pd.to_datetime(df_gym['날짜'])
+    if not df_gym.empty and '날짜' in df_gym.columns:
+        df_gym['날짜'] = pd.to_datetime(df_gym['날짜'], errors='coerce')
         df_gym = df_gym.sort_values('날짜').set_index('날짜')
-        st.write("**1. 근력 (kg)** - 악력, 배근력")
-        st.line_chart(df_gym[['악력', '배근력']])
-        st.write("**2. 유연성/순발력 (cm)** - 좌전굴, 제멀")
-        st.line_chart(df_gym[['좌전굴', '제멀']])
-        st.write("**3. 심폐지구력 (회)** - 왕오달")
-        st.line_chart(df_gym[['왕오달']])
+        
+        cols_gym1 = [c for c in ['악력', '배근력'] if c in df_gym.columns]
+        if cols_gym1:
+            st.write("**1. 근력 (kg)** - 악력, 배근력")
+            st.line_chart(df_gym[cols_gym1])
+            
+        cols_gym2 = [c for c in ['좌전굴', '제멀'] if c in df_gym.columns]
+        if cols_gym2:
+            st.write("**2. 유연성/순발력 (cm)** - 좌전굴, 제멀")
+            st.line_chart(df_gym[cols_gym2])
+            
+        if '왕오달' in df_gym.columns:
+            st.write("**3. 심폐지구력 (회)** - 왕오달")
+            st.line_chart(df_gym[['왕오달']])
 
 # TAB 4: 피드백 복사
 with tab4:
@@ -310,12 +339,14 @@ with tab4:
     safe_target = target_hr if 'target_hr' in locals() else "기록 없음"
     safe_avg = avg_hr if 'avg_hr' in locals() else "0"
     safe_max = max_hr if 'max_hr' in locals() else "0"
+    safe_cadence = cadence if 'cadence' in locals() else "0"
 
     feedback_text = f"""[훈련 보고서]
 - 날짜: {date.today()} / 근무: {safe_duty}
 - 체중: {safe_weight}kg / VO2Max: {safe_vo2}
 - 장비: {safe_shoe} / 타겟: {safe_target}
 - 심박: 평균 {safe_avg}bpm / 최대 {safe_max}bpm
+- 케이던스: {safe_cadence}spm
 - 메모: {feedback_memo}"""
     st.code(feedback_text, language="markdown")
 
