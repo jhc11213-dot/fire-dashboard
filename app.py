@@ -53,20 +53,13 @@ except Exception as e:
 def load_run_data():
     ws = sheet.worksheet("Run")
     data = ws.get_all_values()
-    # 🏃 케이던스가 추가된 전체 열쇠(컬럼)
     cols = ["날짜", "근무", "컨디션", "체중", "VO2Max", "장비", "타겟", "평균심박", "최대심박", "케이던스", "메모"]
-    
     if len(data) <= 1:
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
-        
     df = pd.DataFrame(data[1:], columns=data[0])
-    
-    # KeyError 방지용 안전장치 (열 이름이 존재할 때만 숫자로 변환)
-    if '체중' in df.columns:
-        df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
-    if 'VO2Max' in df.columns:
-        df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
+    if '체중' in df.columns: df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
+    if 'VO2Max' in df.columns: df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
     return df
 
 def load_gym_data():
@@ -77,10 +70,8 @@ def load_gym_data():
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
     df = pd.DataFrame(data[1:], columns=data[0])
-    
     for col in ["악력", "좌전굴", "왕오달", "제멀", "배근력"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+        if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
 
 def load_mock_data():
@@ -91,8 +82,7 @@ def load_mock_data():
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
     df = pd.DataFrame(data[1:], columns=data[0])
-    if '점수' in df.columns:
-        df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
+    if '점수' in df.columns: df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
     return df
 
 def load_study_data():
@@ -108,26 +98,30 @@ def load_study_data():
         "em_theory": 0, "em_review": 0, "em_prob": 0
     }
 
+# 📊 [추가됨] 최근값과 평균값을 계산해주는 헬퍼 함수
+def get_latest_and_avg(df, col_name, default_val):
+    if df.empty or col_name not in df.columns or df[col_name].dropna().empty:
+        return default_val, 0.0
+    valid_data = df[col_name].dropna()
+    return valid_data.iloc[-1], valid_data.mean()
+
 # --- 🌟 상단 대시보드 ---
 st.markdown("<h1 style='text-align: center; font-size: 32px; color: #FF4B4B;'>🔥 2027 소방 컨트롤 타워</h1>", unsafe_allow_html=True)
 d_day = (date(2027, 3, 6) - date.today()).days
 df_run = load_run_data()
 
-# 체중/VO2Max 에러 방지 처리
-if not df_run.empty and '체중' in df_run.columns and pd.notnull(df_run['체중'].iloc[-1]):
-    last_weight = df_run['체중'].iloc[-1]
-else:
-    last_weight = 81.4
-    
-if not df_run.empty and 'VO2Max' in df_run.columns and pd.notnull(df_run['VO2Max'].iloc[-1]):
-    last_vo2 = df_run['VO2Max'].iloc[-1]
-else:
-    last_vo2 = 46.0
+# 체중과 VO2Max 평균 대비 성과 계산
+last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
+last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 46.0)
+
+weight_delta = last_weight - avg_weight if avg_weight != 0 else 0
+vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
 
 col_m1, col_m2, col_m3 = st.columns(3)
 col_m1.metric(label="소방 시험", value=f"D-{d_day}")
-col_m2.metric(label="최근 체중", value=f"{last_weight} kg")
-col_m3.metric(label="VO2 Max", value=f"{last_vo2}")
+# 체중은 마이너스가 초록색이 되도록 delta_color="inverse" 적용
+col_m2.metric(label="최근 체중", value=f"{last_weight:.1f}kg", delta=f"{weight_delta:.1f}kg (평균대비)", delta_color="inverse")
+col_m3.metric(label="VO2 Max", value=f"{last_vo2:.1f}", delta=f"{vo2_delta:.1f} (평균대비)")
 st.write("---")
 
 # --- 탭 구성 ---
@@ -175,6 +169,16 @@ with tab1:
 
     st.write("---")
     st.markdown("#### 📍 4단계: 실전 모의고사 (소방학)")
+    
+    if not df_mock.empty and '과목' in df_mock.columns:
+        df_fire = df_mock[df_mock['과목'] == '소방학개론']
+        if not df_fire.empty:
+            last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
+            f_delta = last_f - avg_f
+            st.metric(label="최근 소방학 점수", value=f"{last_f:.1f}점", delta=f"{f_delta:.1f}점 (평균대비)")
+            st.line_chart(df_fire.groupby('날짜')['점수'].mean())
+            with st.expander("📋 소방학 모의고사 전체 기록"): st.dataframe(df_fire.sort_values(by="날짜", ascending=False))
+
     c_f1, c_f2 = st.columns(2)
     with c_f1:
         f_mock_date = st.date_input("응시 날짜", date.today(), key="f_mock_date")
@@ -186,12 +190,7 @@ with tab1:
     if st.button("💾 소방학 모의고사 저장", use_container_width=True, key="f_mock_btn"):
         sheet.worksheet("Mock").append_row([str(f_mock_date), "소방학개론", f_mock_round, f_mock_score, f_mock_memo])
         st.success("✅ 소방학 점수 저장 완료!")
-        
-    if not df_mock.empty and '과목' in df_mock.columns:
-        df_fire = df_mock[df_mock['과목'] == '소방학개론']
-        if not df_fire.empty:
-            st.line_chart(df_fire.groupby('날짜')['점수'].mean())
-            with st.expander("📋 소방학 모의고사 전체 기록"): st.dataframe(df_fire.sort_values(by="날짜", ascending=False))
+        st.rerun()
 
     st.write("<br><br>", unsafe_allow_html=True)
     
@@ -203,6 +202,16 @@ with tab1:
 
     st.write("---")
     st.markdown("#### 📍 4단계: 실전 모의고사 (응급처치학)")
+    
+    if not df_mock.empty and '과목' in df_mock.columns:
+        df_em = df_mock[df_mock['과목'] == '응급처치학개론']
+        if not df_em.empty:
+            last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
+            e_delta = last_e - avg_e
+            st.metric(label="최근 응급처치 점수", value=f"{last_e:.1f}점", delta=f"{e_delta:.1f}점 (평균대비)")
+            st.line_chart(df_em.groupby('날짜')['점수'].mean())
+            with st.expander("📋 응급처치 모의고사 전체 기록"): st.dataframe(df_em.sort_values(by="날짜", ascending=False))
+
     c_e1, c_e2 = st.columns(2)
     with c_e1:
         e_mock_date = st.date_input("응시 날짜", date.today(), key="e_mock_date")
@@ -214,12 +223,7 @@ with tab1:
     if st.button("💾 응급처치 모의고사 저장", use_container_width=True, key="e_mock_btn"):
         sheet.worksheet("Mock").append_row([str(e_mock_date), "응급처치학개론", e_mock_round, e_mock_score, e_mock_memo])
         st.success("✅ 응급처치 점수 저장 완료!")
-        
-    if not df_mock.empty and '과목' in df_mock.columns:
-        df_em = df_mock[df_mock['과목'] == '응급처치학개론']
-        if not df_em.empty:
-            st.line_chart(df_em.groupby('날짜')['점수'].mean())
-            with st.expander("📋 응급처치 모의고사 전체 기록"): st.dataframe(df_em.sort_values(by="날짜", ascending=False))
+        st.rerun()
 
     st.write("<br><br>", unsafe_allow_html=True)
     st.info("💡 위에서 체크한 1~3단계(이론/회독/기출) 진도를 저장하려면 아래 버튼을 누르세요.")
@@ -234,7 +238,6 @@ with tab2:
         run_date = st.date_input("🗓️ 훈련 날짜", date.today())
         weight = st.number_input("⚖️ 체중 (kg)", value=float(last_weight), step=0.1)
         avg_hr = st.number_input("📉 평균 심박 (bpm)", min_value=60, max_value=200, value=140)
-        # 🏃 케이던스 입력칸
         cadence = st.number_input("👣 케이던스 (spm)", min_value=100, max_value=250, value=170, step=1)
     with c2:
         duty_type = st.selectbox("🏥 근무 형태", ["데이", "이브닝", "나이트", "더블 (16시간)", "오프"])
@@ -268,10 +271,10 @@ with tab2:
         elif "159bpm" in target_hr and max_hr >= 160: st.error("❌ [Fail] 최대 심박 160 오버. 존4 역치 훈련으로 빠짐.")
         else: st.success("✅ [Pass] 심박 통제 완벽함. 훈련 성공.")
         
-        # 케이던스를 포함해서 엑셀에 저장
         new_run = [str(run_date), duty_type, condition, weight, vo2max, shoe_used, target_hr, avg_hr, max_hr, cadence, run_memo]
         sheet.worksheet("Run").append_row(new_run)
         st.success("✅ 러닝 기록이 저장되었습니다!")
+        st.rerun()
 
     st.write("---")
     st.markdown("<h3 style='color: #2C3E50;'>📈 러닝 누적 트렌드</h3>", unsafe_allow_html=True)
@@ -287,6 +290,27 @@ with tab2:
 
 # TAB 3: 체력학원 기록
 with tab3:
+    df_gym = load_gym_data()
+    
+    # 📊 체력 학원 종목별 평균 대비 성과 요약 패널
+    if not df_gym.empty:
+        st.markdown("#### 🏆 최근 측정 기록 (평균 대비)")
+        last_grip, avg_grip = get_latest_and_avg(df_gym, '악력', 0)
+        last_sit, avg_sit = get_latest_and_avg(df_gym, '좌전굴', 0)
+        last_shut, avg_shut = get_latest_and_avg(df_gym, '왕오달', 0)
+        last_jump, avg_jump = get_latest_and_avg(df_gym, '제멀', 0)
+        last_back, avg_back = get_latest_and_avg(df_gym, '배근력', 0)
+
+        gc1, gc2, gc3 = st.columns(3)
+        gc1.metric("💪 악력", f"{last_grip}kg", f"{last_grip - avg_grip:.1f}kg")
+        gc2.metric("🧘 좌전굴", f"{last_sit}cm", f"{last_sit - avg_sit:.1f}cm")
+        gc3.metric("🏃 왕오달", f"{last_shut}회", f"{last_shut - avg_shut:.1f}회")
+        
+        gc4, gc5 = st.columns(2)
+        gc4.metric("🐸 제자리멀리뛰기", f"{last_jump}cm", f"{last_jump - avg_jump:.1f}cm")
+        gc5.metric("🏋️ 배근력", f"{last_back}kg", f"{last_back - avg_back:.1f}kg")
+        st.write("---")
+
     gym_date = st.date_input("🗓️ 측정 날짜", date.today(), key="gym_date_tab3")
     c_gym1, c_gym2 = st.columns(2)
     with c_gym1:
@@ -304,10 +328,10 @@ with tab3:
         new_gym = [str(gym_date), grip, sit_reach, shuttle, jump, back_str, gym_memo]
         sheet.worksheet("Gym").append_row(new_gym)
         st.success("✅ 체력 기록 저장 완료!")
+        st.rerun()
 
     st.write("---")
     st.markdown("<h3 style='color: #2C3E50;'>📈 종목별 성장 궤적</h3>", unsafe_allow_html=True)
-    df_gym = load_gym_data()
     if not df_gym.empty and '날짜' in df_gym.columns:
         df_gym['날짜'] = pd.to_datetime(df_gym['날짜'], errors='coerce')
         df_gym = df_gym.sort_values('날짜').set_index('날짜')
