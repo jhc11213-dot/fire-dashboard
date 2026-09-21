@@ -66,7 +66,6 @@ def load_run_data():
 def load_gym_data():
     ws = sheet.worksheet("Gym")
     data = ws.get_all_values()
-    # 윗몸 컬럼 추가됨
     cols = ["날짜", "악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸", "메모"]
     if len(data) <= 1:
         if not data: ws.append_row(cols)
@@ -209,7 +208,6 @@ def get_score_situp(val):
 # --- 🌟 상단 대시보드 ---
 st.markdown("<h1 style='text-align: center; font-size: 32px; color: #FF4B4B;'>🔥 2027 소방 컨트롤 타워</h1>", unsafe_allow_html=True)
 
-# 💡 랜덤 동기부여 명언
 quotes = [
     "네가 포기하고 싶은 오늘이, 누군가에게는 그토록 살고 싶었던 내일이다.",
     "땀은 배신하지 않는다. 고통은 지나가지만, 영광은 남는다.",
@@ -224,7 +222,7 @@ d_day = (date(2027, 3, 6) - date.today()).days
 df_run = load_run_data()
 
 last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
-last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 45.0)
+last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 46.0)
 
 weight_delta = last_weight - avg_weight if avg_weight != 0 else 0
 vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
@@ -375,9 +373,14 @@ with tab2:
         max_hr = st.number_input("📈 최대 심박 (bpm)", min_value=60, max_value=220, value=150)
 
     shoe_used = st.selectbox("👟 착용 러닝화 선택", ["선택 안함", "아디다스 하이퍼부스트 런", "노바 블라스트 5", "아디제로 에보 SL (1)", "아디제로 에보 SL (2)", "클라우드 몬스터 3 하이퍼"])
+    
+    # 💡 노바 블라스트 5만 .jpg, 나머지는 .png로 매칭!
     shoe_img_map = {
-        "아디다스 하이퍼부스트 런": "hyperboost.jpg", "노바 블라스트 5": "nova5.jpg", 
-        "아디제로 에보 SL (1)": "evo1.jpg", "아디제로 에보 SL (2)": "evo2.jpg", "클라우드 몬스터 3 하이퍼": "cloudmonster.jpg"
+        "아디다스 하이퍼부스트 런": "hyperboost.png", 
+        "노바 블라스트 5": "nova5.jpg", 
+        "아디제로 에보 SL (1)": "evo1.png", 
+        "아디제로 에보 SL (2)": "evo2.png", 
+        "클라우드 몬스터 3 하이퍼": "cloudmonster.png"
     }
     if shoe_used != "선택 안함":
         img_filename = shoe_img_map.get(shoe_used)
@@ -420,7 +423,6 @@ with tab3:
 
     gym_date = st.date_input("🗓️ 측정 날짜", date.today(), key="gym_date_tab3")
     
-    # --- 체력 점수 실시간 환산 패널 ---
     st.markdown("#### 🏅 실시간 점수 환산 (남자 기준)")
     c_gym1, c_gym2 = st.columns(2)
     with c_gym1:
@@ -525,7 +527,7 @@ with tab5:
     
     if st.button(f"💾 주간 목표 저장", use_container_width=True, key="btn_w"):
         sheet.worksheet("Plan").append_row(["주간", w_str, w_goal])
-        st.success("✅ 주간 목표 저장 완료!")
+        st.success(f"✅ 주간 목표 저장 완료!")
         st.rerun()
 
     st.write("---")
@@ -567,7 +569,7 @@ with tab5:
     if st.button(f"💾 {d_str} 체크리스트 저장", use_container_width=True, key="btn_d"):
         new_daily = {tasks[i]: checks[i] for i in range(len(tasks))}
         sheet.worksheet("Plan").append_row(["일간", d_str, json.dumps(new_daily, ensure_ascii=False)])
-        st.success("✅ 일간 체크리스트 저장 완료!")
+        st.success(f"✅ 일간 체크리스트 저장 완료!")
         st.rerun()
 
 # --- 하단 캐릭터 ---
