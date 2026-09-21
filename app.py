@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 import gspread
+import random
 from google.oauth2.service_account import Credentials
 from datetime import datetime, date
 
@@ -65,12 +66,13 @@ def load_run_data():
 def load_gym_data():
     ws = sheet.worksheet("Gym")
     data = ws.get_all_values()
-    cols = ["날짜", "악력", "좌전굴", "왕오달", "제멀", "배근력", "메모"]
+    # 윗몸 컬럼 추가됨
+    cols = ["날짜", "악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸", "메모"]
     if len(data) <= 1:
         if not data: ws.append_row(cols)
         return pd.DataFrame(columns=cols)
     df = pd.DataFrame(data[1:], columns=data[0])
-    for col in ["악력", "좌전굴", "왕오달", "제멀", "배근력"]:
+    for col in ["악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸"]:
         if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
 
@@ -108,7 +110,6 @@ def load_plan_data():
     df = pd.DataFrame(data[1:], columns=data[0])
     return df
 
-# ⏱️ 순공시간 데이터 로드 함수 추가
 def load_study_time_data():
     ws = sheet.worksheet("StudyTime")
     data = ws.get_all_values()
@@ -126,8 +127,99 @@ def get_latest_and_avg(df, col_name, default_val):
     valid_data = df[col_name].dropna()
     return valid_data.iloc[-1], valid_data.mean()
 
+# --- 체력 점수 계산 함수 (소방 남자 기준 환산) ---
+def get_score_grip(val):
+    if val >= 60.0: return 10
+    elif val >= 58.0: return 9
+    elif val >= 56.0: return 8
+    elif val >= 54.0: return 7
+    elif val >= 52.0: return 6
+    elif val >= 50.0: return 5
+    elif val >= 48.0: return 4
+    elif val >= 46.0: return 3
+    elif val >= 44.0: return 2
+    elif val >= 42.0: return 1
+    return 0
+
+def get_score_sit_reach(val):
+    if val >= 25.8: return 10
+    elif val >= 24.2: return 9
+    elif val >= 22.8: return 8
+    elif val >= 21.3: return 7
+    elif val >= 19.9: return 6
+    elif val >= 18.3: return 5
+    elif val >= 16.8: return 4
+    elif val >= 15.6: return 3
+    elif val >= 14.3: return 2
+    elif val >= 13.0: return 1
+    return 0
+
+def get_score_shuttle(val):
+    if val >= 78: return 10
+    elif val >= 74: return 9
+    elif val >= 70: return 8
+    elif val >= 66: return 7
+    elif val >= 62: return 6
+    elif val >= 58: return 5
+    elif val >= 54: return 4
+    elif val >= 48: return 3
+    elif val >= 43: return 2
+    elif val >= 39: return 1
+    return 0
+
+def get_score_jump(val):
+    if val >= 263: return 10
+    elif val >= 258: return 9
+    elif val >= 253: return 8
+    elif val >= 248: return 7
+    elif val >= 243: return 6
+    elif val >= 238: return 5
+    elif val >= 233: return 4
+    elif val >= 228: return 3
+    elif val >= 223: return 2
+    elif val >= 218: return 1
+    return 0
+
+def get_score_back(val):
+    if val >= 206: return 10
+    elif val >= 201: return 9
+    elif val >= 196: return 8
+    elif val >= 191: return 7
+    elif val >= 186: return 6
+    elif val >= 181: return 5
+    elif val >= 176: return 4
+    elif val >= 171: return 3
+    elif val >= 166: return 2
+    elif val >= 161: return 1
+    return 0
+
+def get_score_situp(val):
+    if val >= 52: return 10
+    elif val >= 50: return 9
+    elif val >= 48: return 8
+    elif val >= 46: return 7
+    elif val >= 43: return 6
+    elif val >= 41: return 5
+    elif val >= 39: return 4
+    elif val >= 37: return 3
+    elif val >= 35: return 2
+    elif val >= 33: return 1
+    return 0
+
 # --- 🌟 상단 대시보드 ---
 st.markdown("<h1 style='text-align: center; font-size: 32px; color: #FF4B4B;'>🔥 2027 소방 컨트롤 타워</h1>", unsafe_allow_html=True)
+
+# 💡 랜덤 동기부여 명언
+quotes = [
+    "네가 포기하고 싶은 오늘이, 누군가에게는 그토록 살고 싶었던 내일이다.",
+    "땀은 배신하지 않는다. 고통은 지나가지만, 영광은 남는다.",
+    "오늘 걷지 않으면 내일은 뛰어야 한다.",
+    "준비된 자만이 기회를 잡는다. 2027년, 그 자리는 내 것이다.",
+    "반복에 지치지 않는 자가 성취한다.",
+    "불 속으로 뛰어들 용기, 그 용기를 위한 오늘의 땀방울."
+]
+st.markdown(f"<p style='text-align: center; color: #7F8C8D; font-style: italic; font-size: 16px;'>\"{random.choice(quotes)}\"</p>", unsafe_allow_html=True)
+
 d_day = (date(2027, 3, 6) - date.today()).days
 df_run = load_run_data()
 
@@ -148,14 +240,12 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["📚 필기", "🏃 러닝", "🏋️ �
 
 # TAB 1: 필기 진도
 with tab1:
-    # ⏱️ 1. 캠스터디 순공시간 기능
     st.markdown("<h2 style='color: #27AE60;'>⏱️ 일일 순공 시간 (캠스터디)</h2>", unsafe_allow_html=True)
     df_study_time = load_study_time_data()
     
     if not df_study_time.empty and '날짜' in df_study_time.columns:
         df_study_time['날짜'] = pd.to_datetime(df_study_time['날짜'], errors='coerce')
         st.markdown("#### 📊 최근 순공 시간 추이")
-        # 날짜별로 그룹화해서 막대그래프로 띄우기
         chart_data = df_study_time.groupby('날짜')['순공시간'].sum()
         st.bar_chart(chart_data)
         
@@ -165,7 +255,7 @@ with tab1:
     with c_t2:
         st_hours = st.number_input("순공 시간 (시간)", min_value=0.0, max_value=24.0, value=8.0, step=0.5, key="st_hours")
     with c_t3:
-        st_memo = st.text_input("메모", placeholder="집중도, 특이사항 (예: 5시간 풀집중)", key="st_memo")
+        st_memo = st.text_input("메모", placeholder="집중도, 특이사항", key="st_memo")
         
     if st.button("💾 순공 시간 저장", use_container_width=True):
         sheet.worksheet("StudyTime").append_row([str(st_date), st_hours, st_memo])
@@ -173,8 +263,6 @@ with tab1:
         st.rerun()
 
     st.write("---")
-
-    # 📚 2. 기존 필기 과목 진도 및 모의고사
     study_state = load_study_data()
     df_mock = load_mock_data()
     if not df_mock.empty and '날짜' in df_mock.columns:
@@ -331,6 +419,9 @@ with tab3:
         st.write("---")
 
     gym_date = st.date_input("🗓️ 측정 날짜", date.today(), key="gym_date_tab3")
+    
+    # --- 체력 점수 실시간 환산 패널 ---
+    st.markdown("#### 🏅 실시간 점수 환산 (남자 기준)")
     c_gym1, c_gym2 = st.columns(2)
     with c_gym1:
         grip = st.number_input("💪 악력 (kg)", value=40.0, step=0.1)
@@ -339,13 +430,24 @@ with tab3:
     with c_gym2:
         back_str = st.number_input("🏋️ 배근력 (kg)", value=150.0, step=0.1)
         jump = st.number_input("🐸 제자리멀리뛰기 (cm)", value=200, step=1)
+        situp = st.number_input("🛌 윗몸일으키기 (회/1분)", value=40, step=1)
+        
+    s_grip = get_score_grip(grip)
+    s_sit_reach = get_score_sit_reach(sit_reach)
+    s_shuttle = get_score_shuttle(shuttle)
+    s_back = get_score_back(back_str)
+    s_jump = get_score_jump(jump)
+    s_situp = get_score_situp(situp)
+    total_score = s_grip + s_sit_reach + s_shuttle + s_back + s_jump + s_situp
+    
+    st.info(f"🔥 현재 수치로 체력시험 응시 시 예상 점수는 **총 {total_score}점** (60점 만점) 입니다!")
         
     with st.expander("📝 학원 피드백 메모"): 
         gym_memo = st.text_area("학원 메모", placeholder="강사님 피드백 등 기입", label_visibility="collapsed")
 
     if st.button("💾 체력 기록 저장", use_container_width=True):
-        sheet.worksheet("Gym").append_row([str(gym_date), grip, sit_reach, shuttle, jump, back_str, gym_memo])
-        st.success("✅ 체력 기록 저장 완료!")
+        sheet.worksheet("Gym").append_row([str(gym_date), grip, sit_reach, shuttle, jump, back_str, situp, gym_memo])
+        st.success("✅ 체력 기록 및 윗몸일으키기 저장 완료!")
         st.rerun()
 
     st.write("---")
@@ -354,7 +456,19 @@ with tab3:
         df_gym['날짜'] = pd.to_datetime(df_gym['날짜'], errors='coerce')
         df_gym = df_gym.sort_values('날짜').set_index('날짜')
         cols_gym1 = [c for c in ['악력', '배근력'] if c in df_gym.columns]
-        if cols_gym1: st.line_chart(df_gym[cols_gym1])
+        if cols_gym1: 
+            st.write("**1. 근력 (kg)** - 악력, 배근력")
+            st.line_chart(df_gym[cols_gym1])
+            
+        cols_gym2 = [c for c in ['좌전굴', '제멀'] if c in df_gym.columns]
+        if cols_gym2: 
+            st.write("**2. 유연성/순발력 (cm)** - 좌전굴, 제멀")
+            st.line_chart(df_gym[cols_gym2])
+            
+        cols_gym3 = [c for c in ['왕오달', '윗몸'] if c in df_gym.columns]
+        if cols_gym3:
+            st.write("**3. 심폐/근지구력 (회)** - 왕오달, 윗몸일으키기")
+            st.line_chart(df_gym[cols_gym3])
 
 # TAB 4: 피드백 복사
 with tab4:
