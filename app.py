@@ -6,29 +6,42 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, date
 
-# 기본 세팅
+# 기본 세팅 (모바일 환경에 맞춰 가운데 정렬)
 st.set_page_config(page_title="2027 소방 컨트롤 타워", layout="centered")
 
-# --- 🎨 디자인 세팅 ---
+# --- 🎨 디자인 세팅 (모바일 최적화 및 폰트 에러 수정) ---
 page_bg_css = '''
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
-html, body, [class*="css"], div, p, span, label, h1, h2, h3, h4, h5, h6 {
+
+/* 1. 기본 텍스트에만 주아체 적용 (아이콘이 깨지는 현상 방지) */
+.stApp, p, h1, h2, h3, h4, h5, h6, label, input, button, textarea, li {
     font-family: 'Jua', sans-serif !important;
 }
-/* 스트림릿 기본 화살표/아이콘은 폰트 강제 적용에서 제외 */
-.material-symbols-rounded, .material-icons, .stIcon {
+
+/* 2. 스트림릿 화살표 및 아이콘은 원래 폰트 유지 (arrow_drop_down 방지) */
+span[class*="material"], i, .stIcon, svg {
     font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important;
 }
-.stApp { background-color: #FFF8E7; }
+
+/* 3. 전체 배경색 */
+.stApp { 
+    background-color: #FFF8E7; 
+}
+
+/* 4. 모바일 화면 최적화 (좌우 여백을 줄여서 화면을 넓게 씀) */
 .main .block-container {
     background-color: rgba(255, 255, 255, 0.95);
     border-radius: 15px;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    padding: 1.5rem 1rem !important; /* 모바일에서 쾌적하도록 좌우 패딩 축소 */
+    margin-top: 1rem;
     box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
 }
-html, body, p, div, span, label { color: #333333 !important; }
+
+/* 5. 기본 글자 색상 */
+p, div, span, label, h1, h2, h3, h4, h5, h6 { 
+    color: #333333; 
+}
 </style>
 '''
 st.markdown(page_bg_css, unsafe_allow_html=True)
@@ -36,6 +49,7 @@ st.markdown(page_bg_css, unsafe_allow_html=True)
 # --- ☁️ 구글 스프레드시트 연동 ---
 @st.cache_resource(ttl=600) # 10분마다 재인증(서버 끊김 방지)
 def init_connection():
+    # 여기서 st.secrets["gcp_service_account"] 이름이 완벽하게 맞아야 함
     key_dict = st.secrets["gcp_service_account"]
     creds = Credentials.from_service_account_info(
         key_dict,
@@ -48,9 +62,10 @@ def init_connection():
 
 try:
     client = init_connection()
+    # 엑셀 고유 주소(Key)로 완벽하게 연동
     sheet = client.open_by_key("1XMHkq1ffHRRQ1J-qzGZV76ELQfXjs6icr3a6cg8o6b4")
 except Exception as e:
-    st.error("🚨 구글 스프레드시트 연동 실패! 엑셀 이름이 'fire_db'가 맞는지, 서비스 계정을 편집자로 초대했는지 확인해 줘.")
+    st.error(f"🚨 구글 스프레드시트 연동 실패! 에러 내용: {e}")
     st.stop()
 
 # --- 데이터 읽기/쓰기 함수 ---
@@ -103,20 +118,20 @@ def load_study_data():
     }
 
 # --- 🌟 상단 대시보드 ---
-st.markdown("<h1 style='text-align: center; font-size: 38px; color: #FF4B4B;'>🔥 2027 소방 컨트롤 타워</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; font-size: 32px; color: #FF4B4B;'>🔥 2027 소방 컨트롤 타워</h1>", unsafe_allow_html=True)
 d_day = (date(2027, 3, 6) - date.today()).days
 df_run = load_run_data()
 last_weight = df_run['체중'].iloc[-1] if not df_run.empty else 75.0
 last_vo2 = df_run['VO2Max'].iloc[-1] if not df_run.empty else 46.0
 
 col_m1, col_m2, col_m3 = st.columns(3)
-col_m1.metric(label="소방 필기 시험", value=f"D-{d_day}")
+col_m1.metric(label="소방 시험", value=f"D-{d_day}")
 col_m2.metric(label="최근 체중", value=f"{last_weight} kg")
-col_m3.metric(label="가민 VO2 Max", value=f"{last_vo2}")
+col_m3.metric(label="VO2 Max", value=f"{last_vo2}")
 st.write("---")
 
 # --- 탭 구성 ---
-tab1, tab2, tab3, tab4 = st.tabs(["📚 필기 진도", "🏃‍♂️ 러닝 기록", "🏋️‍♂️ 체력학원 기록", "📋 피드백"])
+tab1, tab2, tab3, tab4 = st.tabs(["📚 필기", "🏃 러닝", "🏋️ 체력", "📋 피드백"])
 
 # TAB 1: 필기 진도
 with tab1:
@@ -129,7 +144,7 @@ with tab1:
     with st.expander("➕ 특강/서브 강의 추가하기"):
         new_sp_name = st.text_input("특강 이름")
         new_sp_total = st.number_input("총 강의 수", min_value=1, value=10)
-        if st.button("특강 등록"):
+        if st.button("특강 등록", use_container_width=True):
             if new_sp_name:
                 study_state["fire_special"].append({"name": new_sp_name, "total": new_sp_total, "completed": 0})
                 sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
@@ -164,10 +179,10 @@ with tab1:
     st.write("<br>", unsafe_allow_html=True)
     if st.button("💾 필기 진도 클라우드 저장", use_container_width=True):
         sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
-        st.success("✅ 공부 진도가 구글 엑셀에 안전하게 저장되었습니다!")
+        st.success("✅ 공부 진도가 구글 엑셀에 저장되었습니다!")
         
     st.write("---")
-    st.markdown("<h2 style='color: #9B59B6;'>💯 4단계: 실전 모의고사 기록</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #9B59B6;'>💯 4단계: 실전 모의고사</h2>", unsafe_allow_html=True)
     c_mock1, c_mock2 = st.columns(2)
     with c_mock1:
         mock_date = st.date_input("응시 날짜", date.today(), key="mock_date")
@@ -175,7 +190,7 @@ with tab1:
     with c_mock2:
         mock_round = st.text_input("모의고사 회차", placeholder="예: 전범위 1회")
         mock_score = st.number_input("점수", min_value=0, max_value=100, value=80, step=5)
-    mock_memo = st.text_area("메모", placeholder="오답 노트 / 약점 파악 등 기입", label_visibility="collapsed")
+    mock_memo = st.text_area("모의고사 메모", placeholder="오답 노트 / 약점 파악 등 기입", label_visibility="collapsed")
     
     if st.button("💾 모의고사 점수 저장", use_container_width=True):
         new_mock = [str(mock_date), mock_sub, mock_round, mock_score, mock_memo]
@@ -202,13 +217,11 @@ with tab2:
         max_hr = st.number_input("📈 최대 심박 (bpm)", min_value=60, max_value=220, value=150)
 
     shoe_used = st.selectbox("👟 착용 러닝화 선택", ["선택 안함", "아디다스 하이퍼부스트 런", "노바 블라스트 5", "아디제로 에보 SL (1)", "아디제로 에보 SL (2)", "클라우드 몬스터 3 하이퍼"])
-    shoe_img_map = {"아디다스 하이퍼부스트 런": "hyperboost.jpg", "노바 블라스트 5": "nova5.jpg", "아디제로 에보 SL (1)": "evo1.jpg", "아디제로 에보 SL (2)": "evo2.jpg", "클라우드 몬스터 3 하이퍼": "cloudmonster.jpg"}
-    if shoe_used in shoe_img_map and os.path.exists(shoe_img_map[shoe_used]):
-        st.image(shoe_img_map[shoe_used], width=400)
-
     target_hr = st.selectbox("🎯 훈련 목적", ["150bpm 미만 (리커버리)", "159bpm 미만 (크루즈/존3)", "타겟 없음 (자유 훈련)"])
     condition = st.slider("🔋 주관적 피로도 (1:최악 ~ 5:최상)", 1, 5, 3)
-    with st.expander("📝 훈련 특이사항 메모"): run_memo = st.text_area("메모", placeholder="특이사항 기입", label_visibility="collapsed")
+    
+    with st.expander("📝 훈련 특이사항 메모"): 
+        run_memo = st.text_area("러닝 메모", placeholder="특이사항 기입", label_visibility="collapsed")
 
     if st.button("💾 러닝 기록 저장 및 판독", use_container_width=True):
         if "150bpm" in target_hr and max_hr >= 150: st.error("❌ [Fail] 최대 심박 150 오버. 다음엔 파워워킹 전환해.")
@@ -216,7 +229,7 @@ with tab2:
         else: st.success("✅ [Pass] 심박 통제 완벽함. 훈련 성공.")
         new_run = [str(run_date), duty_type, condition, weight, vo2max, shoe_used, target_hr, avg_hr, max_hr, run_memo]
         sheet.worksheet("Run").append_row(new_run)
-        st.success("✅ 러닝 기록이 구글 엑셀에 저장되었습니다!")
+        st.success("✅ 러닝 기록이 저장되었습니다!")
 
     st.write("---")
     st.markdown("<h3 style='color: #2C3E50;'>📈 러닝 누적 트렌드</h3>", unsafe_allow_html=True)
@@ -240,12 +253,13 @@ with tab3:
         back_str = st.number_input("🏋️ 배근력 (kg)", value=150.0, step=0.1)
         jump = st.number_input("🐸 제자리멀리뛰기 (cm)", value=200, step=1)
         
-    with st.expander("📝 학원 피드백 메모"): gym_memo = st.text_area("메모", placeholder="강사님 피드백 등 기입", label_visibility="collapsed")
+    with st.expander("📝 학원 피드백 메모"): 
+        gym_memo = st.text_area("학원 메모", placeholder="강사님 피드백 등 기입", label_visibility="collapsed")
 
-    if st.button("💾 체력학원 기록 저장", use_container_width=True):
+    if st.button("💾 체력 기록 저장", use_container_width=True):
         new_gym = [str(gym_date), grip, sit_reach, shuttle, jump, back_str, gym_memo]
         sheet.worksheet("Gym").append_row(new_gym)
-        st.success("✅ 체력 기록이 구글 엑셀에 저장되었습니다!")
+        st.success("✅ 체력 기록 저장 완료!")
 
     st.write("---")
     st.markdown("<h3 style='color: #2C3E50;'>📈 종목별 성장 궤적</h3>", unsafe_allow_html=True)
@@ -265,11 +279,21 @@ with tab4:
     st.markdown("<h3 style='color: #2C3E50;'>📋 피드백 전송용 텍스트</h3>", unsafe_allow_html=True)
     try: feedback_memo = run_memo
     except NameError: feedback_memo = ""
+    
+    # 여기서 duty_type 등 변수가 아직 선언 안 됐을 수 있으니 기본값 처리
+    safe_duty = duty_type if 'duty_type' in locals() else "기록 없음"
+    safe_weight = weight if 'weight' in locals() else "기록 없음"
+    safe_vo2 = vo2max if 'vo2max' in locals() else "기록 없음"
+    safe_shoe = shoe_used if 'shoe_used' in locals() else "기록 없음"
+    safe_target = target_hr if 'target_hr' in locals() else "기록 없음"
+    safe_avg = avg_hr if 'avg_hr' in locals() else "0"
+    safe_max = max_hr if 'max_hr' in locals() else "0"
+
     feedback_text = f"""[훈련 보고서]
-- 날짜: {date.today()} / 근무: {duty_type}
-- 체중: {weight}kg / VO2Max: {vo2max}
-- 장비: {shoe_used} / 타겟: {target_hr}
-- 심박: 평균 {avg_hr}bpm / 최대 {max_hr}bpm
+- 날짜: {date.today()} / 근무: {safe_duty}
+- 체중: {safe_weight}kg / VO2Max: {safe_vo2}
+- 장비: {safe_shoe} / 타겟: {safe_target}
+- 심박: 평균 {safe_avg}bpm / 최대 {safe_max}bpm
 - 메모: {feedback_memo}"""
     st.code(feedback_text, language="markdown")
 
