@@ -131,7 +131,6 @@ def get_latest_and_prev(df, col_name, default_val=0.0):
         return default_val, default_val
     if len(valid_data) == 1:
         return valid_data.iloc[0], valid_data.iloc[0]
-    # 마지막 값(최근)과 뒤에서 두 번째 값(전날/직전) 반환
     return valid_data.iloc[-1], valid_data.iloc[-2]
 
 # --- 🚀 커스텀 스코어보드 (개선=빨강, 악화=파랑) ---
@@ -141,9 +140,8 @@ def render_metric(label, val_str, delta_val=None, unit="", reverse=False):
     elif delta_val == 0:
         delta_html = f"<span style='color: #868E96; font-size: 13px;'>- 직전과 동일</span>"
     else:
-        # reverse=True: 감소해야 좋은 것 (예: 체중, 평균심박)
         is_improved = (delta_val < 0) if reverse else (delta_val > 0)
-        color = "#E74C3C" if is_improved else "#3498DB" # 개선=빨강, 악화=파랑
+        color = "#E74C3C" if is_improved else "#3498DB" 
         arrow = "▲" if delta_val > 0 else "▼"
         delta_html = f"<span style='color: {color}; font-size: 13px; font-weight: 700;'>{arrow} {abs(delta_val):.1f}{unit} (직전 대비)</span>"
         
@@ -270,8 +268,8 @@ last_vo2, prev_vo2 = get_latest_and_prev(df_run, 'VO2Max', 45.0)
 
 col_m1, col_m2, col_m3 = st.columns(3)
 with col_m1: render_metric("D-DAY", f"D-{d_day}")
-with col_m2: render_metric("체중", f"{last_w:.1f}kg", last_w - prev_w, "kg", reverse=True) # 체중은 감소가 개선(빨강)
-with col_m3: render_metric("VO2 MAX", f"{last_vo2:.1f}", last_vo2 - prev_vo2, "", reverse=False) # VO2Max는 상승이 개선(빨강)
+with col_m2: render_metric("체중", f"{last_w:.1f}kg", last_w - prev_w, "kg", reverse=True) 
+with col_m3: render_metric("VO2 MAX", f"{last_vo2:.1f}", last_vo2 - prev_vo2, "", reverse=False)
 st.write("---")
 
 # --- 탭 구성 ---
@@ -436,14 +434,15 @@ with tab2:
         last_hr, prev_hr = get_latest_and_prev(df_run, '평균심박', 0)
         last_cad, prev_cad = get_latest_and_prev(df_run, '케이던스', 0)
         c_r1, c_r2 = st.columns(2)
-        with c_r1: render_metric("평균 심박수", f"{last_hr:.0f}bpm", last_hr - prev_hr, "bpm", reverse=True) # 심박수 감소=빨강
-        with c_r2: render_metric("케이던스", f"{last_cad:.0f}spm", last_cad - prev_cad, "spm", reverse=False) # 케이던스 상승=빨강
+        with c_r1: render_metric("평균 심박수", f"{last_hr:.0f}bpm", last_hr - prev_hr, "bpm", reverse=True) 
+        with c_r2: render_metric("케이던스", f"{last_cad:.0f}spm", last_cad - prev_cad, "spm", reverse=False)
     
     st.write("---")
     c1, c2 = st.columns(2)
     with c1:
+        # 🚨 여기서 last_w 변수 적용!
         run_date = st.date_input("훈련 날짜", today_kst, key="run_date_in")
-        weight = st.number_input("체중 (kg)", value=float(last_weight), step=0.1, key="run_weight_in")
+        weight = st.number_input("체중 (kg)", value=float(last_w), step=0.1, key="run_weight_in")
         avg_hr = st.number_input("평균 심박 (bpm)", min_value=60, max_value=200, value=140, key="run_avghr_in")
         cadence = st.number_input("케이던스 (spm)", min_value=100, max_value=250, value=170, step=1, key="run_cadence_in")
     with c2:
