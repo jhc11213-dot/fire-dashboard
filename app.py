@@ -152,18 +152,21 @@ def get_latest_and_avg(df, col_name, default_val):
     valid_data = df[col_name].dropna()
     return valid_data.iloc[-1], valid_data.mean()
 
-# --- 🗑️ 데이터 에디터 및 삭제/수정 함수 ---
+# --- 🗑️ 데이터 에디터 및 삭제/수정 함수 (에러 방지 적용) ---
 def manage_records(sheet_name, df, title, key_suffix):
     st.markdown(f"#### :material/edit_document: {title} 관리")
     st.caption("💡 표 안의 데이터를 수정하거나, 왼쪽 박스 선택 후 상단의 '휴지통' 아이콘을 눌러 삭제하세요. 완료 후 [동기화]를 눌러야 반영됩니다.")
     
-    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
+    # 🚨 스트림릿 에디터 에러 방지: 모든 데이터를 안전한 '문자열'로 강제 변환
+    safe_df = df.copy().astype(str)
+    safe_df = safe_df.replace(['nan', 'NaT', 'None', '<NA>'], '')
+    
+    edited_df = st.data_editor(safe_df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
     
     if st.button(f":material/sync: {sheet_name} 시트 동기화", key=f"sync_{key_suffix}", use_container_width=True):
         ws = sheet.worksheet(sheet_name)
         ws.clear()
         if not edited_df.empty:
-            # 문자열로 변환하여 안전하게 업로드
             data_to_upload = [edited_df.columns.values.tolist()] + edited_df.fillna("").astype(str).values.tolist()
             ws.append_rows(data_to_upload)
         else:
