@@ -60,43 +60,43 @@ except Exception as e:
     st.error(f"🚨 연동 실패! 에러: {e}")
     st.stop()
 
+# --- 🚀 구글 데이터 밀림 완벽 차단 함수 ---
+def parse_sheet_data(ws_name, cols):
+    ws = sheet.worksheet(ws_name)
+    data = ws.get_all_values()
+    if len(data) <= 1:
+        return pd.DataFrame(columns=cols)
+    
+    clean_rows = []
+    for row in data[1:]:
+        # 정해진 열(기둥) 개수보다 모자라면 빈칸 추가, 넘치면 잘라버림 (에러 원천 차단!)
+        row = row + [""] * (len(cols) - len(row))
+        clean_rows.append(row[:len(cols)])
+        
+    return pd.DataFrame(clean_rows, columns=cols)
+
 # --- 🚀 구글 API 과부하 방지 (데이터 캐싱 적용) ---
 @st.cache_data(ttl=60)
 def load_run_data():
-    ws = sheet.worksheet("Run")
-    data = ws.get_all_values()
     cols = ["날짜", "근무", "컨디션", "체중", "VO2Max", "장비", "타겟", "평균심박", "최대심박", "케이던스", "메모"]
-    if len(data) <= 1:
-        if not data: ws.append_row(cols)
-        return pd.DataFrame(columns=cols)
-    df = pd.DataFrame(data[1:], columns=data[0])
-    if '체중' in df.columns: df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
-    if 'VO2Max' in df.columns: df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
+    df = parse_sheet_data("Run", cols)
+    df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
+    df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
     return df
 
 @st.cache_data(ttl=60)
 def load_gym_data():
-    ws = sheet.worksheet("Gym")
-    data = ws.get_all_values()
     cols = ["날짜", "악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸", "메모"]
-    if len(data) <= 1:
-        if not data: ws.append_row(cols)
-        return pd.DataFrame(columns=cols)
-    df = pd.DataFrame(data[1:], columns=data[0])
+    df = parse_sheet_data("Gym", cols)
     for col in ["악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸"]:
-        if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+        df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
 
 @st.cache_data(ttl=60)
 def load_mock_data():
-    ws = sheet.worksheet("Mock")
-    data = ws.get_all_values()
     cols = ["날짜", "과목", "회차", "점수", "오답노트"]
-    if len(data) <= 1:
-        if not data: ws.append_row(cols)
-        return pd.DataFrame(columns=cols)
-    df = pd.DataFrame(data[1:], columns=data[0])
-    if '점수' in df.columns: df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
+    df = parse_sheet_data("Mock", cols)
+    df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
     return df
 
 @st.cache_data(ttl=60)
@@ -125,25 +125,14 @@ def load_study_data():
 
 @st.cache_data(ttl=60)
 def load_plan_data():
-    ws = sheet.worksheet("Plan")
-    data = ws.get_all_values()
     cols = ["구분", "지정일", "내용"]
-    if len(data) <= 1:
-        if not data: ws.append_row(cols)
-        return pd.DataFrame(columns=cols)
-    df = pd.DataFrame(data[1:], columns=data[0])
-    return df
+    return parse_sheet_data("Plan", cols)
 
 @st.cache_data(ttl=60)
 def load_study_time_data():
-    ws = sheet.worksheet("StudyTime")
-    data = ws.get_all_values()
     cols = ["날짜", "순공시간", "메모"]
-    if len(data) <= 1:
-        if not data: ws.append_row(cols)
-        return pd.DataFrame(columns=cols)
-    df = pd.DataFrame(data[1:], columns=data[0])
-    if '순공시간' in df.columns: df['순공시간'] = pd.to_numeric(df['순공시간'], errors='coerce')
+    df = parse_sheet_data("StudyTime", cols)
+    df['순공시간'] = pd.to_numeric(df['순공시간'], errors='coerce')
     return df
 
 def get_latest_and_avg(df, col_name, default_val):
@@ -152,12 +141,11 @@ def get_latest_and_avg(df, col_name, default_val):
     valid_data = df[col_name].dropna()
     return valid_data.iloc[-1], valid_data.mean()
 
-# --- 🗑️ 데이터 에디터 (에러 원천 차단 완벽 적용) ---
+# --- 🗑️ 데이터 에디터 (밀림 현상 & 이름 없는 열 완벽 차단!) ---
 def manage_records(sheet_name, df, title, key_suffix):
     st.markdown(f"#### :material/edit_document: {title} 관리")
-    st.caption("💡 왼쪽 빈 박스를 체크한 뒤 상단의 '휴지통' 아이콘으로 삭제하거나, 더블클릭해서 수정하세요. 완료 후 [동기화]를 눌러야 저장됩니다.")
+    st.caption("💡 표 왼쪽 빈 박스를 체크한 뒤 상단의 '휴지통' 아이콘으로 삭제하세요. 완료 후 반드시 [동기화]를 눌러주세요.")
     
-    # 🚨 에러 방지: 데이터프레임 구조 자체를 문자로 코팅해서 에디터가 절대 뻗지 않게 함
     if df.empty:
         safe_df = pd.DataFrame(columns=df.columns)
     else:
@@ -168,14 +156,20 @@ def manage_records(sheet_name, df, title, key_suffix):
     
     if st.button(f":material/sync: {sheet_name} 시트 동기화", key=f"sync_{key_suffix}", use_container_width=True):
         ws = sheet.worksheet(sheet_name)
-        ws.clear()
+        ws.clear() # 기존 찌꺼기 완벽 삭제
+        
+        # A1(맨 위 왼쪽)부터 밀림 없이 강제 덮어쓰기!
+        upload_data = [edited_df.columns.tolist()]
         if not edited_df.empty:
-            data_to_upload = [edited_df.columns.values.tolist()] + edited_df.astype(str).values.tolist()
-            ws.append_rows(data_to_upload)
-        else:
-            ws.append_row(list(edited_df.columns))
+            upload_data.extend(edited_df.values.tolist())
+            
+        try:
+            ws.update(values=upload_data, range_name="A1")
+        except:
+            ws.update("A1", upload_data) # 버전 호환용 안전장치
+            
         st.cache_data.clear()
-        st.success("✅ 구글 시트 반영 완료!")
+        st.success("✅ 구글 시트에 깔끔하게 반영 완료!")
         st.rerun()
 
 # --- 체력 점수 계산 함수 ---
@@ -297,7 +291,6 @@ with tab1:
     if not df_study_time.empty and '날짜' in df_study_time.columns:
         st_chart = df_study_time.copy()
         st_chart['날짜'] = pd.to_datetime(st_chart['날짜'], errors='coerce')
-        # 🚨 그래프 에러 방지 (날짜가 꼬인 쓰레기 데이터는 빼고 그림)
         st_chart = st_chart.dropna(subset=['날짜', '순공시간'])
         if not st_chart.empty:
             st.bar_chart(st_chart.groupby('날짜')['순공시간'].sum())
@@ -369,7 +362,6 @@ with tab1:
             diff = last_f - FIRE_BENCHMARK
             st.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (합격선 대비)")
             
-            # 🚨 그래프 에러 방지
             df_fire['날짜'] = pd.to_datetime(df_fire['날짜'], errors='coerce')
             df_fire = df_fire.dropna(subset=['날짜', '점수'])
             if not df_fire.empty:
@@ -428,7 +420,6 @@ with tab1:
             diff_e = last_e - EM_BENCHMARK
             st.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (합격선 대비)")
 
-            # 🚨 그래프 에러 방지
             df_em['날짜'] = pd.to_datetime(df_em['날짜'], errors='coerce')
             df_em = df_em.dropna(subset=['날짜', '점수'])
             if not df_em.empty:
@@ -505,7 +496,7 @@ with tab2:
     if not df_run.empty and '날짜' in df_run.columns:
         run_chart = df_run.copy()
         run_chart['날짜'] = pd.to_datetime(run_chart['날짜'], errors='coerce')
-        run_chart = run_chart.dropna(subset=['날짜']) # 🚨 그래프 에러 방지
+        run_chart = run_chart.dropna(subset=['날짜'])
         if not run_chart.empty:
             run_chart = run_chart.sort_values('날짜').set_index('날짜')
             if '체중' in run_chart.columns: st.line_chart(run_chart['체중'])
@@ -558,7 +549,7 @@ with tab3:
     if not df_gym.empty and '날짜' in df_gym.columns:
         gym_chart = df_gym.copy()
         gym_chart['날짜'] = pd.to_datetime(gym_chart['날짜'], errors='coerce')
-        gym_chart = gym_chart.dropna(subset=['날짜']) # 🚨 그래프 에러 방지
+        gym_chart = gym_chart.dropna(subset=['날짜'])
         if not gym_chart.empty:
             gym_chart = gym_chart.sort_values('날짜').set_index('날짜')
             cols_gym1 = [c for c in ['악력', '배근력'] if c in gym_chart.columns]
