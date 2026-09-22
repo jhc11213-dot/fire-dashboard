@@ -121,16 +121,28 @@ def load_mock_data():
 
 def load_study_data():
     ws = sheet.worksheet("Study")
-    try:
-        val = ws.acell('A1').value
-        if val: return json.loads(val)
-    except: pass
-    return {
+    default_data = {
         "fire_theory": 0, "fire_special": [], 
         "fire_review": {"기초이론": 0, "연소이론": 0, "화재이론": 0, "소화이론": 0, "건축방재 및 피난": 0, "위험물 및 특수가연물": 0, "소방시설": 0, "소방행정 및 조직": 0, "소방기능": 0, "재난관리론": 0},
-        "fire_prob": 0,
-        "em_theory": 0, "em_review": 0, "em_prob": 0
+        "fire_prob": {"기초이론": 0, "연소이론": 0, "화재이론": 0, "소화이론": 0, "건축방재 및 피난": 0, "위험물 및 특수가연물": 0, "소방시설": 0, "소방행정 및 조직": 0, "소방기능": 0, "재난관리론": 0},
+        "em_theory": 0, 
+        "em_review": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}, 
+        "em_prob": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}
     }
+    try:
+        val = ws.acell('A1').value
+        if val: 
+            data = json.loads(val)
+            # 기존 데이터(정수형)가 있으면 딕셔너리로 덮어쓰기 (에러 방지)
+            if isinstance(data.get("fire_prob"), (int, float)): data["fire_prob"] = default_data["fire_prob"]
+            if "em_review" not in data or isinstance(data.get("em_review"), (int, float)): data["em_review"] = default_data["em_review"]
+            if "em_prob" not in data or isinstance(data.get("em_prob"), (int, float)): data["em_prob"] = default_data["em_prob"]
+            
+            for k, v in default_data.items():
+                if k not in data: data[k] = v
+            return data
+    except: pass
+    return default_data
 
 def load_plan_data():
     ws = sheet.worksheet("Plan")
@@ -172,7 +184,6 @@ def get_score_grip(val):
     elif val >= 44.0: return 2
     elif val >= 42.0: return 1
     return 0
-
 def get_score_sit_reach(val):
     if val >= 25.8: return 10
     elif val >= 24.2: return 9
@@ -185,7 +196,6 @@ def get_score_sit_reach(val):
     elif val >= 14.3: return 2
     elif val >= 13.0: return 1
     return 0
-
 def get_score_shuttle(val):
     if val >= 78: return 10
     elif val >= 74: return 9
@@ -198,7 +208,6 @@ def get_score_shuttle(val):
     elif val >= 43: return 2
     elif val >= 39: return 1
     return 0
-
 def get_score_jump(val):
     if val >= 263: return 10
     elif val >= 258: return 9
@@ -211,7 +220,6 @@ def get_score_jump(val):
     elif val >= 223: return 2
     elif val >= 218: return 1
     return 0
-
 def get_score_back(val):
     if val >= 206: return 10
     elif val >= 201: return 9
@@ -224,7 +232,6 @@ def get_score_back(val):
     elif val >= 166: return 2
     elif val >= 161: return 1
     return 0
-
 def get_score_situp(val):
     if val >= 52: return 10
     elif val >= 50: return 9
@@ -325,13 +332,19 @@ with tab1:
     for i, chap in enumerate(chapters):
         if i % 2 == 0: study_state["fire_review"][chap] = c_rev1.number_input(f"{chap}", 0, 50, study_state["fire_review"][chap], key=f"chap_{i}")
         else: study_state["fire_review"][chap] = c_rev2.number_input(f"{chap}", 0, 50, study_state["fire_review"][chap], key=f"chap_{i}")
-            
     st.caption(f"전체 {min(study_state['fire_review'].values())}회독 달성")
 
     st.write("---")
-    st.markdown("#### 3단계: 기출 및 모의고사")
-    study_state["fire_prob"] = st.number_input("기출 진행도 (%)", 0, 100, study_state["fire_prob"], key="fire_prob_in")
+    st.markdown("#### 3단계: 단원별 기출/문제풀이")
+    c_prob1, c_prob2 = st.columns(2)
+    prob_chapters = list(study_state["fire_prob"].keys())
+    for i, chap in enumerate(prob_chapters):
+        if i % 2 == 0: study_state["fire_prob"][chap] = c_prob1.number_input(f"{chap}", 0, 50, study_state["fire_prob"][chap], key=f"f_prob_{i}")
+        else: study_state["fire_prob"][chap] = c_prob2.number_input(f"{chap}", 0, 50, study_state["fire_prob"][chap], key=f"f_prob_{i}")
+    st.caption(f"기출 전체 {min(study_state['fire_prob'].values())}회독 달성")
 
+    st.write("---")
+    st.markdown("#### 4단계: 실전 모의고사")
     if not df_mock.empty and '과목' in df_mock.columns:
         df_fire = df_mock[df_mock['과목'] == '소방학개론']
         if not df_fire.empty:
@@ -353,10 +366,29 @@ with tab1:
 
     st.write("<br>", unsafe_allow_html=True)
     st.markdown("### :material/medical_services: 응급처치학개론")
+    st.markdown("#### 1단계: 이론 강의")
     study_state["em_theory"] = st.number_input("이론 완료 수", 0, 200, study_state["em_theory"], key="em_theory_in")
-    study_state["em_review"] = st.number_input("복습 회독 수", 0, 50, study_state["em_review"], key="em_review_in")
-    study_state["em_prob"] = st.number_input("기출 진행도 (%)", 0, 100, study_state["em_prob"], key="em_prob_in")
+    
+    st.write("---")
+    st.markdown("#### 2단계: 단원별 복습")
+    c_em_rev1, c_em_rev2 = st.columns(2)
+    em_rev_chapters = list(study_state["em_review"].keys())
+    for i, chap in enumerate(em_rev_chapters):
+        if i % 2 == 0: study_state["em_review"][chap] = c_em_rev1.number_input(f"{chap}", 0, 50, study_state["em_review"][chap], key=f"em_rev_{i}")
+        else: study_state["em_review"][chap] = c_em_rev2.number_input(f"{chap}", 0, 50, study_state["em_review"][chap], key=f"em_rev_{i}")
+    st.caption(f"전체 {min(study_state['em_review'].values())}회독 달성")
 
+    st.write("---")
+    st.markdown("#### 3단계: 단원별 기출/문제풀이")
+    c_em_prob1, c_em_prob2 = st.columns(2)
+    em_prob_chapters = list(study_state["em_prob"].keys())
+    for i, chap in enumerate(em_prob_chapters):
+        if i % 2 == 0: study_state["em_prob"][chap] = c_em_prob1.number_input(f"{chap}", 0, 50, study_state["em_prob"][chap], key=f"em_prob_{i}")
+        else: study_state["em_prob"][chap] = c_em_prob2.number_input(f"{chap}", 0, 50, study_state["em_prob"][chap], key=f"em_prob_{i}")
+    st.caption(f"기출 전체 {min(study_state['em_prob'].values())}회독 달성")
+
+    st.write("---")
+    st.markdown("#### 4단계: 실전 모의고사")
     if not df_mock.empty and '과목' in df_mock.columns:
         df_em = df_mock[df_mock['과목'] == '응급처치학개론']
         if not df_em.empty:
@@ -377,7 +409,7 @@ with tab1:
         st.rerun()
 
     st.write("<br>", unsafe_allow_html=True)
-    if st.button(":material/sync: 전체 진도 동기화", use_container_width=True, key="sync_btn"):
+    if st.button(":material/sync: 전체 진도 클라우드 저장", use_container_width=True, key="sync_btn"):
         sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
         st.success("클라우드 동기화 완료!", icon=":material/cloud_done:")
 
