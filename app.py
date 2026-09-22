@@ -108,8 +108,7 @@ def load_study_data():
         "fire_prob": {"기초이론": 0, "연소이론": 0, "화재이론": 0, "소화이론": 0, "건축방재 및 피난": 0, "위험물 및 특수가연물": 0, "소방시설": 0, "소방행정 및 조직": 0, "소방기능": 0, "재난관리론": 0},
         "em_theory": 0, 
         "em_review": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}, 
-        "em_prob": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0},
-        "bench_26": {"fire": 0, "em": 0}
+        "em_prob": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}
     }
     try:
         val = ws.acell('A1').value
@@ -118,7 +117,6 @@ def load_study_data():
             if isinstance(data.get("fire_prob"), (int, float)): data["fire_prob"] = default_data["fire_prob"]
             if "em_review" not in data or isinstance(data.get("em_review"), (int, float)): data["em_review"] = default_data["em_review"]
             if "em_prob" not in data or isinstance(data.get("em_prob"), (int, float)): data["em_prob"] = default_data["em_prob"]
-            if "bench_26" not in data: data["bench_26"] = default_data["bench_26"]
             for k, v in default_data.items():
                 if k not in data: data[k] = v
             return data
@@ -245,7 +243,7 @@ d_day = (date(2027, 3, 6) - today_kst).days
 df_run = load_run_data()
 
 last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
-last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 46.0)
+last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 45.0) # VO2 Max 45.0 으로 수정 완료!
 
 weight_delta = last_weight - avg_weight if avg_weight != 0 else 0
 vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
@@ -281,7 +279,7 @@ with tab1:
         
     if st.button(":material/save: 기록 저장", use_container_width=True, key="btn_st"):
         sheet.worksheet("StudyTime").append_row([str(st_date), st_hours, st_memo])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
 
     st.write("---")
@@ -302,7 +300,7 @@ with tab1:
             if new_sp_name:
                 study_state["fire_special"].append({"name": new_sp_name, "total": new_sp_total, "completed": 0})
                 sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
-                st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+                st.cache_data.clear()
                 st.rerun()
                 
     for i, sp in enumerate(study_state["fire_special"]):
@@ -330,7 +328,9 @@ with tab1:
     st.write("---")
     st.markdown("#### 4단계: 실전 모의고사")
     
+    # 🎯 소방학개론 60점 고정 배너 (숨겨지지 않게 항상 노출!)
     FIRE_BENCHMARK = 60
+    st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
     
     if not df_mock.empty and '과목' in df_mock.columns:
         df_fire = df_mock[df_mock['과목'] == '소방학개론']
@@ -338,15 +338,16 @@ with tab1:
             last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
             diff = last_f - FIRE_BENCHMARK
             
-            c_score1, c_score2 = st.columns(2)
-            c_score1.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (합격점 대비)")
-            c_score2.info("🎯 목표 기준점: 60점 (고정)")
+            st.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (합격선 대비)")
             
+            # 그래프 생성 부분
             chart_df = df_fire.groupby('날짜')['점수'].mean().reset_index()
-            chart_df['기준점(60점)'] = FIRE_BENCHMARK
+            chart_df['합격선(60점)'] = FIRE_BENCHMARK
             chart_df = chart_df.set_index('날짜')
             chart_df.rename(columns={'점수': '내 점수'}, inplace=True)
-            st.line_chart(chart_df[['내 점수', '기준점(60점)']])
+            st.line_chart(chart_df[['내 점수', '합격선(60점)']])
+        else:
+            st.caption("아직 기록된 소방학 점수가 없습니다. 아래에서 점수를 저장하면 그래프가 나타납니다!")
 
     c_f1, c_f2 = st.columns(2)
     with c_f1:
@@ -358,7 +359,7 @@ with tab1:
     
     if st.button(":material/save: 점수 저장", use_container_width=True, key="f_mock_btn"):
         sheet.worksheet("Mock").append_row([str(f_mock_date), "소방학개론", f_mock_round, f_mock_score, f_mock_memo])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
 
     st.write("<br>", unsafe_allow_html=True)
@@ -387,7 +388,9 @@ with tab1:
     st.write("---")
     st.markdown("#### 4단계: 실전 모의고사")
     
+    # 🎯 응급처치학개론 60점 고정 배너 (숨겨지지 않게 항상 노출!)
     EM_BENCHMARK = 60
+    st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
     
     if not df_mock.empty and '과목' in df_mock.columns:
         df_em = df_mock[df_mock['과목'] == '응급처치학개론']
@@ -395,15 +398,16 @@ with tab1:
             last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
             diff_e = last_e - EM_BENCHMARK
             
-            c_score_e1, c_score_e2 = st.columns(2)
-            c_score_e1.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (합격점 대비)")
-            c_score_e2.info("🎯 목표 기준점: 60점 (고정)")
+            st.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (합격선 대비)")
 
+            # 그래프 생성 부분
             chart_df_e = df_em.groupby('날짜')['점수'].mean().reset_index()
-            chart_df_e['기준점(60점)'] = EM_BENCHMARK
+            chart_df_e['합격선(60점)'] = EM_BENCHMARK
             chart_df_e = chart_df_e.set_index('날짜')
             chart_df_e.rename(columns={'점수': '내 점수'}, inplace=True)
-            st.line_chart(chart_df_e[['내 점수', '기준점(60점)']])
+            st.line_chart(chart_df_e[['내 점수', '합격선(60점)']])
+        else:
+            st.caption("아직 기록된 응급처치 점수가 없습니다. 아래에서 점수를 저장하면 그래프가 나타납니다!")
 
     c_e1, c_e2 = st.columns(2)
     with c_e1:
@@ -415,14 +419,14 @@ with tab1:
     
     if st.button(":material/save: 점수 저장", use_container_width=True, key="e_mock_btn"):
         sheet.worksheet("Mock").append_row([str(e_mock_date), "응급처치학개론", e_mock_round, e_mock_score, e_mock_memo])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
 
     st.write("<br>", unsafe_allow_html=True)
     if st.button(":material/sync: 전체 진도 클라우드 저장", use_container_width=True, key="sync_btn"):
         sheet.worksheet("Study").update_acell('A1', json.dumps(study_state, ensure_ascii=False))
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
-        st.rerun()
+        st.cache_data.clear()
+        st.success("클라우드 동기화 완료!", icon=":material/cloud_done:")
 
 # TAB 2: 러닝 기록
 with tab2:
@@ -460,7 +464,7 @@ with tab2:
         elif "159bpm" in target_hr and max_hr >= 160: st.error("심박 타겟 실패 (160 초과)", icon=":material/warning:")
         else: st.success("훈련 완료", icon=":material/check_circle:")
         sheet.worksheet("Run").append_row([str(run_date), duty_type, condition, weight, vo2max, shoe_used, target_hr, avg_hr, max_hr, cadence, run_memo])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
 
     st.write("---")
@@ -507,7 +511,7 @@ with tab3:
 
     if st.button(":material/save: 체력 기록 저장", use_container_width=True, key="gym_save_btn"):
         sheet.worksheet("Gym").append_row([str(gym_date), grip, sit_reach, shuttle, jump, back_str, situp, gym_memo])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
 
     st.write("---")
@@ -560,7 +564,7 @@ with tab5:
     with c_m2: m_goal = st.text_area("내용", value=m_val, label_visibility="collapsed", key="m_goal_in")
     if st.button(":material/save: 월간 저장", key="btn_m", use_container_width=True):
         sheet.worksheet("Plan").append_row(["월간", m_str, m_goal])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
 
     st.write("---")
@@ -575,7 +579,7 @@ with tab5:
     w_goal = st.text_area("내용", value=w_val, label_visibility="collapsed", key="w_goal_in")
     if st.button(":material/save: 주간 저장", key="btn_w", use_container_width=True):
         sheet.worksheet("Plan").append_row(["주간", w_str, w_goal])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
 
     st.write("---")
@@ -611,5 +615,5 @@ with tab5:
     
     if st.button(":material/save: 체크리스트 저장", key="btn_d", use_container_width=True):
         sheet.worksheet("Plan").append_row(["일간", d_str, json.dumps({tasks[i]: checks[i] for i in range(len(tasks))}, ensure_ascii=False)])
-        st.cache_data.clear() # 🚀 저장 후 캐시 리셋
+        st.cache_data.clear()
         st.rerun()
