@@ -104,8 +104,7 @@ def load_study_data():
         "fire_prob": {"기초이론": 0, "연소이론": 0, "화재이론": 0, "소화이론": 0, "건축방재 및 피난": 0, "위험물 및 특수가연물": 0, "소방시설": 0, "소방행정 및 조직": 0, "소방기능": 0, "재난관리론": 0},
         "em_theory": 0, 
         "em_review": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}, 
-        "em_prob": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0},
-        "bench_26": {"fire": 0, "em": 0} # 26년도 기출 벤치마크 데이터 추가!
+        "em_prob": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}
     }
     try:
         val = ws.acell('A1').value
@@ -114,8 +113,6 @@ def load_study_data():
             if isinstance(data.get("fire_prob"), (int, float)): data["fire_prob"] = default_data["fire_prob"]
             if "em_review" not in data or isinstance(data.get("em_review"), (int, float)): data["em_review"] = default_data["em_review"]
             if "em_prob" not in data or isinstance(data.get("em_prob"), (int, float)): data["em_prob"] = default_data["em_prob"]
-            if "bench_26" not in data: data["bench_26"] = default_data["bench_26"]
-            
             for k, v in default_data.items():
                 if k not in data: data[k] = v
             return data
@@ -251,7 +248,7 @@ col_m2.metric(label="WEIGHT", value=f"{last_weight:.1f}kg", delta=f"{weight_delt
 col_m3.metric(label="VO2 MAX", value=f"{last_vo2:.1f}", delta=f"{vo2_delta:.1f}")
 st.write("---")
 
-# --- 탭 구성 (머티리얼 아이콘 적용) ---
+# --- 탭 구성 ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     ":material/menu_book: 필기", 
     ":material/directions_run: 러닝", 
@@ -322,25 +319,27 @@ with tab1:
     st.caption(f"기출 전체 {min(study_state['fire_prob'].values())}회독 달성")
 
     st.write("---")
-    st.markdown("#### 4단계: 실전 모의고사 (26년 기출 비교)")
+    st.markdown("#### 4단계: 실전 모의고사")
     
-    # 🎯 2026년 기출 비교 패널
-    c_bench1, c_bench2 = st.columns(2)
-    with c_bench1:
-        study_state["bench_26"]["fire"] = st.number_input("🎯 26년도 소방학 기출 점수 (기준점)", 0, 100, study_state["bench_26"]["fire"], key="bench_fire_in")
-        st.caption("위 점수와 최근 모의고사가 비교됩니다.")
-    with c_bench2:
-        if not df_mock.empty and '과목' in df_mock.columns:
-            df_fire = df_mock[df_mock['과목'] == '소방학개론']
-            if not df_fire.empty:
-                last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
-                diff = last_f - study_state["bench_26"]["fire"]
-                st.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (26년 기출 대비)")
-                
+    # 🎯 소방학개론 60점 고정 및 그래프
+    FIRE_BENCHMARK = 60
+    
     if not df_mock.empty and '과목' in df_mock.columns:
         df_fire = df_mock[df_mock['과목'] == '소방학개론']
         if not df_fire.empty:
-            st.line_chart(df_fire.groupby('날짜')['점수'].mean())
+            last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
+            diff = last_f - FIRE_BENCHMARK
+            
+            c_score1, c_score2 = st.columns(2)
+            c_score1.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (합격점 대비)")
+            c_score2.info("🎯 목표 기준점: 60점 (고정)")
+            
+            # 그래프에 내 점수와 기준점(60)을 2개의 선으로 표시
+            chart_df = df_fire.groupby('날짜')['점수'].mean().reset_index()
+            chart_df['기준점(60점)'] = FIRE_BENCHMARK
+            chart_df = chart_df.set_index('날짜')
+            chart_df.rename(columns={'점수': '내 점수'}, inplace=True)
+            st.line_chart(chart_df[['내 점수', '기준점(60점)']])
 
     c_f1, c_f2 = st.columns(2)
     with c_f1:
@@ -378,25 +377,27 @@ with tab1:
     st.caption(f"기출 전체 {min(study_state['em_prob'].values())}회독 달성")
 
     st.write("---")
-    st.markdown("#### 4단계: 실전 모의고사 (26년 기출 비교)")
+    st.markdown("#### 4단계: 실전 모의고사")
     
-    # 🎯 2026년 기출 비교 패널 (응급처치)
-    c_bench_e1, c_bench_e2 = st.columns(2)
-    with c_bench_e1:
-        study_state["bench_26"]["em"] = st.number_input("🎯 26년도 응급처치 기출 점수 (기준점)", 0, 100, study_state["bench_26"]["em"], key="bench_em_in")
-        st.caption("위 점수와 최근 모의고사가 비교됩니다.")
-    with c_bench_e2:
-        if not df_mock.empty and '과목' in df_mock.columns:
-            df_em = df_mock[df_mock['과목'] == '응급처치학개론']
-            if not df_em.empty:
-                last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
-                diff_e = last_e - study_state["bench_26"]["em"]
-                st.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (26년 기출 대비)")
-
+    # 🎯 응급처치학개론 60점 고정 및 그래프
+    EM_BENCHMARK = 60
+    
     if not df_mock.empty and '과목' in df_mock.columns:
         df_em = df_mock[df_mock['과목'] == '응급처치학개론']
         if not df_em.empty:
-            st.line_chart(df_em.groupby('날짜')['점수'].mean())
+            last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
+            diff_e = last_e - EM_BENCHMARK
+            
+            c_score_e1, c_score_e2 = st.columns(2)
+            c_score_e1.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (합격점 대비)")
+            c_score_e2.info("🎯 목표 기준점: 60점 (고정)")
+
+            # 그래프에 내 점수와 기준점(60)을 2개의 선으로 표시
+            chart_df_e = df_em.groupby('날짜')['점수'].mean().reset_index()
+            chart_df_e['기준점(60점)'] = EM_BENCHMARK
+            chart_df_e = chart_df_e.set_index('날짜')
+            chart_df_e.rename(columns={'점수': '내 점수'}, inplace=True)
+            st.line_chart(chart_df_e[['내 점수', '기준점(60점)']])
 
     c_e1, c_e2 = st.columns(2)
     with c_e1:
