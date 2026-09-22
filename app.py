@@ -155,18 +155,23 @@ def get_latest_and_avg(df, col_name, default_val):
 # --- 🗑️ 데이터 에디터 (에러 원천 차단 완벽 적용) ---
 def manage_records(sheet_name, df, title, key_suffix):
     st.markdown(f"#### :material/edit_document: {title} 관리")
-    st.caption("💡 표 안의 데이터를 수정하거나, 왼쪽 박스 선택 후 상단의 '휴지통' 아이콘을 눌러 삭제하세요. 완료 후 [동기화]를 눌러야 반영됩니다.")
+    st.caption("💡 왼쪽 빈 박스를 체크한 뒤 상단의 '휴지통' 아이콘으로 삭제하거나, 더블클릭해서 수정하세요. 완료 후 [동기화]를 눌러야 저장됩니다.")
     
-    # 에러 방지: 데이터 프레임을 에디터용으로 완벽하게 초기화
-    edit_df = df.copy().reset_index(drop=True)
-    edited_df = st.data_editor(edit_df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
+    # 🚨 PyArrow 직렬화 에러를 완벽 차단하기 위해 데이터를 '순수 텍스트' 표로 재조립
+    clean_data = {}
+    for col in df.columns:
+        # 모든 데이터를 강제로 문자열로 바꾸고, 결측치(NaN, NaT 등)는 깔끔하게 빈칸으로 날림
+        clean_data[col] = df[col].astype(str).replace(['nan', 'NaT', 'None', '<NA>', 'NaN'], '')
+        
+    safe_df = pd.DataFrame(clean_data)
+    
+    edited_df = st.data_editor(safe_df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
     
     if st.button(f":material/sync: {sheet_name} 시트 동기화", key=f"sync_{key_suffix}", use_container_width=True):
         ws = sheet.worksheet(sheet_name)
         ws.clear()
         if not edited_df.empty:
-            safe_upload_df = edited_df.fillna("").astype(str)
-            data_to_upload = [safe_upload_df.columns.values.tolist()] + safe_upload_df.values.tolist()
+            data_to_upload = [edited_df.columns.values.tolist()] + edited_df.values.tolist()
             ws.append_rows(data_to_upload)
         else:
             ws.append_row(list(edited_df.columns))
@@ -291,7 +296,6 @@ with tab1:
     df_study_time = load_study_time_data()
     
     if not df_study_time.empty and '날짜' in df_study_time.columns:
-        # 그래프 전용 안전한 복사본 생성
         st_chart = df_study_time.copy()
         st_chart['날짜'] = pd.to_datetime(st_chart['날짜'], errors='coerce')
         st.bar_chart(st_chart.groupby('날짜')['순공시간'].sum())
@@ -307,7 +311,6 @@ with tab1:
         st.rerun()
         
     with st.expander("⏱️ 순공 시간 기록 보기/관리"):
-        # 원본 데이터 그대로 전달 (에러 완벽 차단)
         manage_records("StudyTime", df_study_time, "순공 시간", "studytime")
 
     st.write("---")
@@ -358,7 +361,6 @@ with tab1:
     st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
     
     if not df_mock.empty and '과목' in df_mock.columns:
-        # 그래프 전용 안전한 복사본 생성
         df_fire = df_mock[df_mock['과목'] == '소방학개론'].copy()
         if not df_fire.empty:
             last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
@@ -415,7 +417,6 @@ with tab1:
     st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
     
     if not df_mock.empty and '과목' in df_mock.columns:
-        # 그래프 전용 안전한 복사본 생성
         df_em = df_mock[df_mock['과목'] == '응급처치학개론'].copy()
         if not df_em.empty:
             last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
@@ -494,7 +495,6 @@ with tab2:
     st.write("---")
     st.markdown("### :material/monitoring: 트렌드 분석")
     if not df_run.empty and '날짜' in df_run.columns:
-        # 그래프 전용 안전한 복사본 생성
         run_chart = df_run.copy()
         run_chart['날짜'] = pd.to_datetime(run_chart['날짜'], errors='coerce')
         run_chart = run_chart.sort_values('날짜').set_index('날짜')
@@ -546,7 +546,6 @@ with tab3:
     st.write("---")
     st.markdown("### :material/show_chart: 성장 궤적")
     if not df_gym.empty and '날짜' in df_gym.columns:
-        # 그래프 전용 안전한 복사본 생성
         gym_chart = df_gym.copy()
         gym_chart['날짜'] = pd.to_datetime(gym_chart['날짜'], errors='coerce')
         gym_chart = gym_chart.sort_values('날짜').set_index('날짜')
