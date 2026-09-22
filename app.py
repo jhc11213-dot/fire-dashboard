@@ -17,17 +17,12 @@ st.set_page_config(page_title="2027 소방 컨트롤 타워", layout="centered")
 # --- 🎨 디자인 세팅 (세련된 차도남 스타일) ---
 page_bg_css = '''
 <style>
-/* 프리텐다드 폰트 적용 */
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
 .stApp, p, h1, h2, h3, h4, h5, h6, label, input, button, textarea, li, .st-emotion-cache-1104idt {
     font-family: 'Pretendard', -apple-system, sans-serif !important;
 }
-
-/* 차가운 도시 느낌의 쿨 그레이 배경 */
 .stApp { background-color: #F4F6F8; }
-
-/* 메인 컨테이너 (화이트 + 은은한 그림자) */
 .main .block-container {
     background-color: #FFFFFF;
     border-radius: 16px;
@@ -36,32 +31,14 @@ page_bg_css = '''
     border: 1px solid #E9ECEF;
     box-shadow: 0px 8px 30px rgba(0, 0, 0, 0.04);
 }
-
-/* 텍스트 색상 묵직하게 */
-h1, h2, h3, h4, h5, h6 { 
-    color: #1A1D20 !important; 
-    font-weight: 700 !important; 
-    letter-spacing: -0.5px; 
-}
+h1, h2, h3, h4, h5, h6 { color: #1A1D20 !important; font-weight: 700 !important; letter-spacing: -0.5px; }
 p, div, span, label, li { color: #343A40; }
-
-/* 탭 UI 세련되게 */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-}
+.stTabs [data-baseweb="tab-list"] { gap: 8px; }
 .stTabs [data-baseweb="tab"] {
-    height: 50px;
-    white-space: pre-wrap;
-    background-color: #F8F9FA;
-    border-radius: 8px 8px 0px 0px;
-    gap: 1px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    height: 50px; white-space: pre-wrap; background-color: #F8F9FA;
+    border-radius: 8px 8px 0px 0px; gap: 1px; padding-top: 10px; padding-bottom: 10px;
 }
-.stTabs [aria-selected="true"] {
-    background-color: #FFFFFF;
-    border-bottom: 2px solid #212529 !important;
-}
+.stTabs [aria-selected="true"] { background-color: #FFFFFF; border-bottom: 2px solid #212529 !important; }
 </style>
 '''
 st.markdown(page_bg_css, unsafe_allow_html=True)
@@ -127,16 +104,17 @@ def load_study_data():
         "fire_prob": {"기초이론": 0, "연소이론": 0, "화재이론": 0, "소화이론": 0, "건축방재 및 피난": 0, "위험물 및 특수가연물": 0, "소방시설": 0, "소방행정 및 조직": 0, "소방기능": 0, "재난관리론": 0},
         "em_theory": 0, 
         "em_review": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}, 
-        "em_prob": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0}
+        "em_prob": {"응급의료체계": 0, "환자평가": 0, "심폐소생술": 0, "내과응급": 0, "외상응급": 0, "특수응급(소아/노인)": 0},
+        "bench_26": {"fire": 0, "em": 0} # 26년도 기출 벤치마크 데이터 추가!
     }
     try:
         val = ws.acell('A1').value
         if val: 
             data = json.loads(val)
-            # 기존 데이터(정수형)가 있으면 딕셔너리로 덮어쓰기 (에러 방지)
             if isinstance(data.get("fire_prob"), (int, float)): data["fire_prob"] = default_data["fire_prob"]
             if "em_review" not in data or isinstance(data.get("em_review"), (int, float)): data["em_review"] = default_data["em_review"]
             if "em_prob" not in data or isinstance(data.get("em_prob"), (int, float)): data["em_prob"] = default_data["em_prob"]
+            if "bench_26" not in data: data["bench_26"] = default_data["bench_26"]
             
             for k, v in default_data.items():
                 if k not in data: data[k] = v
@@ -344,12 +322,24 @@ with tab1:
     st.caption(f"기출 전체 {min(study_state['fire_prob'].values())}회독 달성")
 
     st.write("---")
-    st.markdown("#### 4단계: 실전 모의고사")
+    st.markdown("#### 4단계: 실전 모의고사 (26년 기출 비교)")
+    
+    # 🎯 2026년 기출 비교 패널
+    c_bench1, c_bench2 = st.columns(2)
+    with c_bench1:
+        study_state["bench_26"]["fire"] = st.number_input("🎯 26년도 소방학 기출 점수 (기준점)", 0, 100, study_state["bench_26"]["fire"], key="bench_fire_in")
+        st.caption("위 점수와 최근 모의고사가 비교됩니다.")
+    with c_bench2:
+        if not df_mock.empty and '과목' in df_mock.columns:
+            df_fire = df_mock[df_mock['과목'] == '소방학개론']
+            if not df_fire.empty:
+                last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
+                diff = last_f - study_state["bench_26"]["fire"]
+                st.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (26년 기출 대비)")
+                
     if not df_mock.empty and '과목' in df_mock.columns:
         df_fire = df_mock[df_mock['과목'] == '소방학개론']
         if not df_fire.empty:
-            last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
-            st.metric(label="최근 점수", value=f"{last_f:.1f}점", delta=f"{last_f - avg_f:.1f}점 (평균대비)")
             st.line_chart(df_fire.groupby('날짜')['점수'].mean())
 
     c_f1, c_f2 = st.columns(2)
@@ -388,12 +378,24 @@ with tab1:
     st.caption(f"기출 전체 {min(study_state['em_prob'].values())}회독 달성")
 
     st.write("---")
-    st.markdown("#### 4단계: 실전 모의고사")
+    st.markdown("#### 4단계: 실전 모의고사 (26년 기출 비교)")
+    
+    # 🎯 2026년 기출 비교 패널 (응급처치)
+    c_bench_e1, c_bench_e2 = st.columns(2)
+    with c_bench_e1:
+        study_state["bench_26"]["em"] = st.number_input("🎯 26년도 응급처치 기출 점수 (기준점)", 0, 100, study_state["bench_26"]["em"], key="bench_em_in")
+        st.caption("위 점수와 최근 모의고사가 비교됩니다.")
+    with c_bench_e2:
+        if not df_mock.empty and '과목' in df_mock.columns:
+            df_em = df_mock[df_mock['과목'] == '응급처치학개론']
+            if not df_em.empty:
+                last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
+                diff_e = last_e - study_state["bench_26"]["em"]
+                st.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (26년 기출 대비)")
+
     if not df_mock.empty and '과목' in df_mock.columns:
         df_em = df_mock[df_mock['과목'] == '응급처치학개론']
         if not df_em.empty:
-            last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
-            st.metric(label="최근 점수", value=f"{last_e:.1f}점", delta=f"{last_e - avg_e:.1f}점 (평균대비)")
             st.line_chart(df_em.groupby('날짜')['점수'].mean())
 
     c_e1, c_e2 = st.columns(2)
