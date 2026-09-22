@@ -152,6 +152,26 @@ def get_latest_and_avg(df, col_name, default_val):
     valid_data = df[col_name].dropna()
     return valid_data.iloc[-1], valid_data.mean()
 
+# --- 🗑️ 데이터 에디터 및 삭제/수정 함수 ---
+def manage_records(sheet_name, df, title, key_suffix):
+    st.markdown(f"#### :material/edit_document: {title} 관리")
+    st.caption("💡 표 안의 데이터를 수정하거나, 왼쪽 박스 선택 후 상단의 '휴지통' 아이콘을 눌러 삭제하세요. 완료 후 [동기화]를 눌러야 반영됩니다.")
+    
+    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
+    
+    if st.button(f":material/sync: {sheet_name} 시트 동기화", key=f"sync_{key_suffix}", use_container_width=True):
+        ws = sheet.worksheet(sheet_name)
+        ws.clear()
+        if not edited_df.empty:
+            # 문자열로 변환하여 안전하게 업로드
+            data_to_upload = [edited_df.columns.values.tolist()] + edited_df.fillna("").astype(str).values.tolist()
+            ws.append_rows(data_to_upload)
+        else:
+            ws.append_row(list(edited_df.columns))
+        st.cache_data.clear()
+        st.success("✅ 구글 시트 반영 완료!")
+        st.rerun()
+
 # --- 체력 점수 계산 함수 ---
 def get_score_grip(val):
     if val >= 60.0: return 10
@@ -243,7 +263,7 @@ d_day = (date(2027, 3, 6) - today_kst).days
 df_run = load_run_data()
 
 last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
-last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 45.0) # VO2 Max 45.0 으로 수정 완료!
+last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 45.0)
 
 weight_delta = last_weight - avg_weight if avg_weight != 0 else 0
 vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
@@ -267,10 +287,6 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.markdown("### :material/timer: 순공 시간")
     df_study_time = load_study_time_data()
-    
-    if not df_study_time.empty and '날짜' in df_study_time.columns:
-        df_study_time['날짜'] = pd.to_datetime(df_study_time['날짜'], errors='coerce')
-        st.bar_chart(df_study_time.groupby('날짜')['순공시간'].sum())
         
     c_t1, c_t2, c_t3 = st.columns([1, 1, 2])
     with c_t1: st_date = st.date_input("날짜", today_kst, key="st_date")
@@ -281,12 +297,13 @@ with tab1:
         sheet.worksheet("StudyTime").append_row([str(st_date), st_hours, st_memo])
         st.cache_data.clear()
         st.rerun()
+        
+    with st.expander("⏱️ 순공 시간 기록 보기/관리"):
+        manage_records("StudyTime", df_study_time, "순공 시간", "studytime")
 
     st.write("---")
     study_state = load_study_data()
     df_mock = load_mock_data()
-    if not df_mock.empty and '날짜' in df_mock.columns:
-        df_mock['날짜'] = pd.to_datetime(df_mock['날짜'], errors='coerce')
 
     st.markdown("### :material/local_fire_department: 소방학개론")
     st.markdown("#### 1단계: 이론 강의")
@@ -328,7 +345,6 @@ with tab1:
     st.write("---")
     st.markdown("#### 4단계: 실전 모의고사")
     
-    # 🎯 소방학개론 60점 고정 배너 (숨겨지지 않게 항상 노출!)
     FIRE_BENCHMARK = 60
     st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
     
@@ -337,17 +353,7 @@ with tab1:
         if not df_fire.empty:
             last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
             diff = last_f - FIRE_BENCHMARK
-            
             st.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (합격선 대비)")
-            
-            # 그래프 생성 부분
-            chart_df = df_fire.groupby('날짜')['점수'].mean().reset_index()
-            chart_df['합격선(60점)'] = FIRE_BENCHMARK
-            chart_df = chart_df.set_index('날짜')
-            chart_df.rename(columns={'점수': '내 점수'}, inplace=True)
-            st.line_chart(chart_df[['내 점수', '합격선(60점)']])
-        else:
-            st.caption("아직 기록된 소방학 점수가 없습니다. 아래에서 점수를 저장하면 그래프가 나타납니다!")
 
     c_f1, c_f2 = st.columns(2)
     with c_f1:
@@ -388,7 +394,6 @@ with tab1:
     st.write("---")
     st.markdown("#### 4단계: 실전 모의고사")
     
-    # 🎯 응급처치학개론 60점 고정 배너 (숨겨지지 않게 항상 노출!)
     EM_BENCHMARK = 60
     st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
     
@@ -397,17 +402,7 @@ with tab1:
         if not df_em.empty:
             last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
             diff_e = last_e - EM_BENCHMARK
-            
             st.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (합격선 대비)")
-
-            # 그래프 생성 부분
-            chart_df_e = df_em.groupby('날짜')['점수'].mean().reset_index()
-            chart_df_e['합격선(60점)'] = EM_BENCHMARK
-            chart_df_e = chart_df_e.set_index('날짜')
-            chart_df_e.rename(columns={'점수': '내 점수'}, inplace=True)
-            st.line_chart(chart_df_e[['내 점수', '합격선(60점)']])
-        else:
-            st.caption("아직 기록된 응급처치 점수가 없습니다. 아래에서 점수를 저장하면 그래프가 나타납니다!")
 
     c_e1, c_e2 = st.columns(2)
     with c_e1:
@@ -421,6 +416,10 @@ with tab1:
         sheet.worksheet("Mock").append_row([str(e_mock_date), "응급처치학개론", e_mock_round, e_mock_score, e_mock_memo])
         st.cache_data.clear()
         st.rerun()
+        
+    st.write("---")
+    with st.expander("📋 모의고사 전체 기록 보기/관리"):
+        manage_records("Mock", df_mock, "모의고사", "mock")
 
     st.write("<br>", unsafe_allow_html=True)
     if st.button(":material/sync: 전체 진도 클라우드 저장", use_container_width=True, key="sync_btn"):
@@ -468,12 +467,8 @@ with tab2:
         st.rerun()
 
     st.write("---")
-    st.markdown("### :material/monitoring: 트렌드 분석")
-    if not df_run.empty and '날짜' in df_run.columns:
-        df_run['날짜'] = pd.to_datetime(df_run['날짜'], errors='coerce')
-        df_run = df_run.sort_values('날짜').set_index('날짜')
-        if '체중' in df_run.columns: st.line_chart(df_run['체중'])
-        if 'VO2Max' in df_run.columns: st.line_chart(df_run['VO2Max'])
+    with st.expander("🏃‍♂️ 러닝 전체 기록 보기/관리"):
+        manage_records("Run", df_run, "러닝", "run")
 
 # TAB 3: 체력학원 기록
 with tab3:
@@ -515,16 +510,8 @@ with tab3:
         st.rerun()
 
     st.write("---")
-    st.markdown("### :material/show_chart: 성장 궤적")
-    if not df_gym.empty and '날짜' in df_gym.columns:
-        df_gym['날짜'] = pd.to_datetime(df_gym['날짜'], errors='coerce')
-        df_gym = df_gym.sort_values('날짜').set_index('날짜')
-        cols_gym1 = [c for c in ['악력', '배근력'] if c in df_gym.columns]
-        if cols_gym1: st.line_chart(df_gym[cols_gym1])
-        cols_gym2 = [c for c in ['좌전굴', '제멀'] if c in df_gym.columns]
-        if cols_gym2: st.line_chart(df_gym[cols_gym2])
-        cols_gym3 = [c for c in ['왕오달', '윗몸'] if c in df_gym.columns]
-        if cols_gym3: st.line_chart(df_gym[cols_gym3])
+    with st.expander("🏋️ 체력 전체 기록 보기/관리"):
+        manage_records("Gym", df_gym, "체력", "gym")
 
 # TAB 4: 리포트 (피드백)
 with tab4:
@@ -617,3 +604,7 @@ with tab5:
         sheet.worksheet("Plan").append_row(["일간", d_str, json.dumps({tasks[i]: checks[i] for i in range(len(tasks))}, ensure_ascii=False)])
         st.cache_data.clear()
         st.rerun()
+
+    st.write("---")
+    with st.expander("📅 플래너 전체 기록 보기/관리"):
+        manage_records("Plan", df_plan, "플래너", "plan")
