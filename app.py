@@ -157,21 +157,20 @@ def manage_records(sheet_name, df, title, key_suffix):
     st.markdown(f"#### :material/edit_document: {title} 관리")
     st.caption("💡 왼쪽 빈 박스를 체크한 뒤 상단의 '휴지통' 아이콘으로 삭제하거나, 더블클릭해서 수정하세요. 완료 후 [동기화]를 눌러야 저장됩니다.")
     
-    # 🚨 PyArrow 직렬화 에러를 완벽 차단하기 위해 데이터를 '순수 텍스트' 표로 재조립
-    clean_data = {}
-    for col in df.columns:
-        # 모든 데이터를 강제로 문자열로 바꾸고, 결측치(NaN, NaT 등)는 깔끔하게 빈칸으로 날림
-        clean_data[col] = df[col].astype(str).replace(['nan', 'NaT', 'None', '<NA>', 'NaN'], '')
-        
-    safe_df = pd.DataFrame(clean_data)
-    
+    # 🚨 에러 방지: 데이터프레임 구조 자체를 문자로 코팅해서 에디터가 절대 뻗지 않게 함
+    if df.empty:
+        safe_df = pd.DataFrame(columns=df.columns)
+    else:
+        safe_df = df.copy()
+        safe_df = safe_df.astype(str).replace(['nan', 'NaT', 'None', '<NA>', 'NaN'], '')
+
     edited_df = st.data_editor(safe_df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
     
     if st.button(f":material/sync: {sheet_name} 시트 동기화", key=f"sync_{key_suffix}", use_container_width=True):
         ws = sheet.worksheet(sheet_name)
         ws.clear()
         if not edited_df.empty:
-            data_to_upload = [edited_df.columns.values.tolist()] + edited_df.values.tolist()
+            data_to_upload = [edited_df.columns.values.tolist()] + edited_df.astype(str).values.tolist()
             ws.append_rows(data_to_upload)
         else:
             ws.append_row(list(edited_df.columns))
@@ -298,7 +297,10 @@ with tab1:
     if not df_study_time.empty and '날짜' in df_study_time.columns:
         st_chart = df_study_time.copy()
         st_chart['날짜'] = pd.to_datetime(st_chart['날짜'], errors='coerce')
-        st.bar_chart(st_chart.groupby('날짜')['순공시간'].sum())
+        # 🚨 그래프 에러 방지 (날짜가 꼬인 쓰레기 데이터는 빼고 그림)
+        st_chart = st_chart.dropna(subset=['날짜', '순공시간'])
+        if not st_chart.empty:
+            st.bar_chart(st_chart.groupby('날짜')['순공시간'].sum())
         
     c_t1, c_t2, c_t3 = st.columns([1, 1, 2])
     with c_t1: st_date = st.date_input("날짜", today_kst, key="st_date")
@@ -367,12 +369,15 @@ with tab1:
             diff = last_f - FIRE_BENCHMARK
             st.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (합격선 대비)")
             
+            # 🚨 그래프 에러 방지
             df_fire['날짜'] = pd.to_datetime(df_fire['날짜'], errors='coerce')
-            chart_df = df_fire.groupby('날짜')['점수'].mean().reset_index()
-            chart_df['합격선(60점)'] = FIRE_BENCHMARK
-            chart_df = chart_df.set_index('날짜')
-            chart_df.rename(columns={'점수': '내 점수'}, inplace=True)
-            st.line_chart(chart_df[['내 점수', '합격선(60점)']])
+            df_fire = df_fire.dropna(subset=['날짜', '점수'])
+            if not df_fire.empty:
+                chart_df = df_fire.groupby('날짜')['점수'].mean().reset_index()
+                chart_df['합격선(60점)'] = FIRE_BENCHMARK
+                chart_df = chart_df.set_index('날짜')
+                chart_df.rename(columns={'점수': '내 점수'}, inplace=True)
+                st.line_chart(chart_df[['내 점수', '합격선(60점)']])
 
     c_f1, c_f2 = st.columns(2)
     with c_f1:
@@ -423,12 +428,15 @@ with tab1:
             diff_e = last_e - EM_BENCHMARK
             st.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (합격선 대비)")
 
+            # 🚨 그래프 에러 방지
             df_em['날짜'] = pd.to_datetime(df_em['날짜'], errors='coerce')
-            chart_df_e = df_em.groupby('날짜')['점수'].mean().reset_index()
-            chart_df_e['합격선(60점)'] = EM_BENCHMARK
-            chart_df_e = chart_df_e.set_index('날짜')
-            chart_df_e.rename(columns={'점수': '내 점수'}, inplace=True)
-            st.line_chart(chart_df_e[['내 점수', '합격선(60점)']])
+            df_em = df_em.dropna(subset=['날짜', '점수'])
+            if not df_em.empty:
+                chart_df_e = df_em.groupby('날짜')['점수'].mean().reset_index()
+                chart_df_e['합격선(60점)'] = EM_BENCHMARK
+                chart_df_e = chart_df_e.set_index('날짜')
+                chart_df_e.rename(columns={'점수': '내 점수'}, inplace=True)
+                st.line_chart(chart_df_e[['내 점수', '합격선(60점)']])
 
     c_e1, c_e2 = st.columns(2)
     with c_e1:
@@ -497,9 +505,11 @@ with tab2:
     if not df_run.empty and '날짜' in df_run.columns:
         run_chart = df_run.copy()
         run_chart['날짜'] = pd.to_datetime(run_chart['날짜'], errors='coerce')
-        run_chart = run_chart.sort_values('날짜').set_index('날짜')
-        if '체중' in run_chart.columns: st.line_chart(run_chart['체중'])
-        if 'VO2Max' in run_chart.columns: st.line_chart(run_chart['VO2Max'])
+        run_chart = run_chart.dropna(subset=['날짜']) # 🚨 그래프 에러 방지
+        if not run_chart.empty:
+            run_chart = run_chart.sort_values('날짜').set_index('날짜')
+            if '체중' in run_chart.columns: st.line_chart(run_chart['체중'])
+            if 'VO2Max' in run_chart.columns: st.line_chart(run_chart['VO2Max'])
 
     with st.expander("🏃‍♂️ 러닝 전체 기록 보기/관리"):
         manage_records("Run", df_run, "러닝", "run")
@@ -548,13 +558,15 @@ with tab3:
     if not df_gym.empty and '날짜' in df_gym.columns:
         gym_chart = df_gym.copy()
         gym_chart['날짜'] = pd.to_datetime(gym_chart['날짜'], errors='coerce')
-        gym_chart = gym_chart.sort_values('날짜').set_index('날짜')
-        cols_gym1 = [c for c in ['악력', '배근력'] if c in gym_chart.columns]
-        if cols_gym1: st.line_chart(gym_chart[cols_gym1])
-        cols_gym2 = [c for c in ['좌전굴', '제멀'] if c in gym_chart.columns]
-        if cols_gym2: st.line_chart(gym_chart[cols_gym2])
-        cols_gym3 = [c for c in ['왕오달', '윗몸'] if c in gym_chart.columns]
-        if cols_gym3: st.line_chart(gym_chart[cols_gym3])
+        gym_chart = gym_chart.dropna(subset=['날짜']) # 🚨 그래프 에러 방지
+        if not gym_chart.empty:
+            gym_chart = gym_chart.sort_values('날짜').set_index('날짜')
+            cols_gym1 = [c for c in ['악력', '배근력'] if c in gym_chart.columns]
+            if cols_gym1: st.line_chart(gym_chart[cols_gym1])
+            cols_gym2 = [c for c in ['좌전굴', '제멀'] if c in gym_chart.columns]
+            if cols_gym2: st.line_chart(gym_chart[cols_gym2])
+            cols_gym3 = [c for c in ['왕오달', '윗몸'] if c in gym_chart.columns]
+            if cols_gym3: st.line_chart(gym_chart[cols_gym3])
 
     with st.expander("🏋️ 체력 전체 기록 보기/관리"):
         manage_records("Gym", df_gym, "체력", "gym")
