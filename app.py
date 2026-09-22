@@ -60,44 +60,33 @@ except Exception as e:
     st.error(f"🚨 연동 실패! 에러: {e}")
     st.stop()
 
-# --- 🚀 구글 데이터 밀림 완벽 차단 함수 ---
+# --- 🚀 구글 데이터 파싱 (안전장치) ---
 def parse_sheet_data(ws_name, cols):
     ws = sheet.worksheet(ws_name)
     data = ws.get_all_values()
     if len(data) <= 1:
         return pd.DataFrame(columns=cols)
-    
     clean_rows = []
     for row in data[1:]:
-        # 정해진 열(기둥) 개수보다 모자라면 빈칸 추가, 넘치면 잘라버림 (에러 원천 차단!)
         row = row + [""] * (len(cols) - len(row))
         clean_rows.append(row[:len(cols)])
-        
     return pd.DataFrame(clean_rows, columns=cols)
 
-# --- 🚀 구글 API 과부하 방지 (데이터 캐싱 적용) ---
+# --- 🚀 데이터 읽기 ---
 @st.cache_data(ttl=60)
 def load_run_data():
     cols = ["날짜", "근무", "컨디션", "체중", "VO2Max", "장비", "타겟", "평균심박", "최대심박", "케이던스", "메모"]
-    df = parse_sheet_data("Run", cols)
-    df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
-    df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
-    return df
+    return parse_sheet_data("Run", cols)
 
 @st.cache_data(ttl=60)
 def load_gym_data():
     cols = ["날짜", "악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸", "메모"]
-    df = parse_sheet_data("Gym", cols)
-    for col in ["악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸"]:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    return df
+    return parse_sheet_data("Gym", cols)
 
 @st.cache_data(ttl=60)
 def load_mock_data():
     cols = ["날짜", "과목", "회차", "점수", "오답노트"]
-    df = parse_sheet_data("Mock", cols)
-    df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
-    return df
+    return parse_sheet_data("Mock", cols)
 
 @st.cache_data(ttl=60)
 def load_study_data():
@@ -131,43 +120,59 @@ def load_plan_data():
 @st.cache_data(ttl=60)
 def load_study_time_data():
     cols = ["날짜", "순공시간", "메모"]
-    df = parse_sheet_data("StudyTime", cols)
-    df['순공시간'] = pd.to_numeric(df['순공시간'], errors='coerce')
-    return df
+    return parse_sheet_data("StudyTime", cols)
 
-def get_latest_and_avg(df, col_name, default_val):
-    if df.empty or col_name not in df.columns or df[col_name].dropna().empty:
-        return default_val, 0.0
-    valid_data = df[col_name].dropna()
-    return valid_data.iloc[-1], valid_data.mean()
+# --- 🚀 [중요] 최근 기록 및 직전 기록 추출 함수 ---
+def get_latest_and_prev(df, col_name, default_val=0.0):
+    if df.empty or col_name not in df.columns:
+        return default_val, default_val
+    valid_data = pd.to_numeric(df[col_name], errors='coerce').dropna()
+    if valid_data.empty:
+        return default_val, default_val
+    if len(valid_data) == 1:
+        return valid_data.iloc[0], valid_data.iloc[0]
+    # 마지막 값(최근)과 뒤에서 두 번째 값(전날/직전) 반환
+    return valid_data.iloc[-1], valid_data.iloc[-2]
 
-# --- 🗑️ 데이터 에디터 (밀림 현상 & 이름 없는 열 완벽 차단!) ---
+# --- 🚀 커스텀 스코어보드 (개선=빨강, 악화=파랑) ---
+def render_metric(label, val_str, delta_val=None, unit="", reverse=False):
+    if delta_val is None:
+        delta_html = "<span style='color: transparent; font-size: 13px;'>-</span>"
+    elif delta_val == 0:
+        delta_html = f"<span style='color: #868E96; font-size: 13px;'>- 직전과 동일</span>"
+    else:
+        # reverse=True: 감소해야 좋은 것 (예: 체중, 평균심박)
+        is_improved = (delta_val < 0) if reverse else (delta_val > 0)
+        color = "#E74C3C" if is_improved else "#3498DB" # 개선=빨강, 악화=파랑
+        arrow = "▲" if delta_val > 0 else "▼"
+        delta_html = f"<span style='color: {color}; font-size: 13px; font-weight: 700;'>{arrow} {abs(delta_val):.1f}{unit} (직전 대비)</span>"
+        
+    st.markdown(f"""
+    <div style="padding: 1.2rem 0.5rem; border-radius: 12px; background-color: #F8F9FA; border: 1px solid #E9ECEF; text-align: center; height: 110px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 1rem;">
+        <p style="margin: 0; font-size: 13px; color: #868E96; font-weight: 600;">{label}</p>
+        <h3 style="margin: 5px 0; color: #1A1D20; font-size: 22px; font-weight: 800;">{val_str}</h3>
+        {delta_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- 🗑️ 데이터 에디터 (오류 제로!) ---
 def manage_records(sheet_name, df, title, key_suffix):
     st.markdown(f"#### :material/edit_document: {title} 관리")
-    st.caption("💡 표 왼쪽 빈 박스를 체크한 뒤 상단의 '휴지통' 아이콘으로 삭제하세요. 완료 후 반드시 [동기화]를 눌러주세요.")
+    st.caption("💡 표 왼쪽 빈 박스를 체크한 뒤 상단의 '휴지통' 아이콘으로 삭제하세요. (완료 후 반드시 [동기화] 클릭)")
     
-    if df.empty:
-        safe_df = pd.DataFrame(columns=df.columns)
+    if df.empty: safe_df = pd.DataFrame(columns=df.columns)
     else:
-        safe_df = df.copy()
-        safe_df = safe_df.astype(str).replace(['nan', 'NaT', 'None', '<NA>', 'NaN'], '')
-
+        safe_df = df.copy().astype(str).replace(['nan', 'NaT', 'None', '<NA>', 'NaN'], '')
+    
     edited_df = st.data_editor(safe_df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
     
     if st.button(f":material/sync: {sheet_name} 시트 동기화", key=f"sync_{key_suffix}", use_container_width=True):
         ws = sheet.worksheet(sheet_name)
-        ws.clear() # 기존 찌꺼기 완벽 삭제
-        
-        # A1(맨 위 왼쪽)부터 밀림 없이 강제 덮어쓰기!
+        ws.clear()
         upload_data = [edited_df.columns.tolist()]
-        if not edited_df.empty:
-            upload_data.extend(edited_df.values.tolist())
-            
-        try:
-            ws.update(values=upload_data, range_name="A1")
-        except:
-            ws.update("A1", upload_data) # 버전 호환용 안전장치
-            
+        if not edited_df.empty: upload_data.extend(edited_df.values.tolist())
+        try: ws.update(values=upload_data, range_name="A1")
+        except: ws.update("A1", upload_data)
         st.cache_data.clear()
         st.success("✅ 구글 시트에 깔끔하게 반영 완료!")
         st.rerun()
@@ -253,25 +258,20 @@ quotes = [
     "네가 포기하고 싶은 오늘이, 누군가에게는 그토록 살고 싶었던 내일이다.",
     "땀은 배신하지 않는다. 고통은 지나가지만, 영광은 남는다.",
     "오늘 걷지 않으면 내일은 뛰어야 한다.",
-    "준비된 자만이 기회를 잡는다. 2027년, 그 자리는 내 것이다.",
-    "반복에 지치지 않는 자가 성취한다.",
-    "불 속으로 뛰어들 용기, 그 용기를 위한 오늘의 땀방울."
+    "준비된 자만이 기회를 잡는다. 2027년, 그 자리는 내 것이다."
 ]
 st.markdown(f"<p style='text-align: center; color: #868E96; font-size: 15px; margin-top: -10px;'>\"{random.choice(quotes)}\"</p>", unsafe_allow_html=True)
 
 d_day = (date(2027, 3, 6) - today_kst).days
 df_run = load_run_data()
 
-last_weight, avg_weight = get_latest_and_avg(df_run, '체중', 81.4)
-last_vo2, avg_vo2 = get_latest_and_avg(df_run, 'VO2Max', 45.0)
-
-weight_delta = last_weight - avg_weight if avg_weight != 0 else 0
-vo2_delta = last_vo2 - avg_vo2 if avg_vo2 != 0 else 0
+last_w, prev_w = get_latest_and_prev(df_run, '체중', 81.4)
+last_vo2, prev_vo2 = get_latest_and_prev(df_run, 'VO2Max', 45.0)
 
 col_m1, col_m2, col_m3 = st.columns(3)
-col_m1.metric(label="D-DAY", value=f"D-{d_day}")
-col_m2.metric(label="WEIGHT", value=f"{last_weight:.1f}kg", delta=f"{weight_delta:.1f}kg", delta_color="inverse")
-col_m3.metric(label="VO2 MAX", value=f"{last_vo2:.1f}", delta=f"{vo2_delta:.1f}")
+with col_m1: render_metric("D-DAY", f"D-{d_day}")
+with col_m2: render_metric("체중", f"{last_w:.1f}kg", last_w - prev_w, "kg", reverse=True) # 체중은 감소가 개선(빨강)
+with col_m3: render_metric("VO2 MAX", f"{last_vo2:.1f}", last_vo2 - prev_vo2, "", reverse=False) # VO2Max는 상승이 개선(빨강)
 st.write("---")
 
 # --- 탭 구성 ---
@@ -287,13 +287,10 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.markdown("### :material/timer: 순공 시간")
     df_study_time = load_study_time_data()
+    last_st, prev_st = get_latest_and_prev(df_study_time, '순공시간', 0)
     
-    if not df_study_time.empty and '날짜' in df_study_time.columns:
-        st_chart = df_study_time.copy()
-        st_chart['날짜'] = pd.to_datetime(st_chart['날짜'], errors='coerce')
-        st_chart = st_chart.dropna(subset=['날짜', '순공시간'])
-        if not st_chart.empty:
-            st.bar_chart(st_chart.groupby('날짜')['순공시간'].sum())
+    if not df_study_time.empty:
+        render_metric("최근 순공 시간", f"{last_st}H", last_st - prev_st, "H", reverse=False)
         
     c_t1, c_t2, c_t3 = st.columns([1, 1, 2])
     with c_t1: st_date = st.date_input("날짜", today_kst, key="st_date")
@@ -353,23 +350,13 @@ with tab1:
     st.markdown("#### 4단계: 실전 모의고사")
     
     FIRE_BENCHMARK = 60
-    st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
-    
-    if not df_mock.empty and '과목' in df_mock.columns:
+    if not df_mock.empty:
         df_fire = df_mock[df_mock['과목'] == '소방학개론'].copy()
         if not df_fire.empty:
-            last_f, avg_f = get_latest_and_avg(df_fire, '점수', 0)
-            diff = last_f - FIRE_BENCHMARK
-            st.metric(label="최근 모의고사 점수", value=f"{last_f:.1f}점", delta=f"{diff:.1f}점 (합격선 대비)")
-            
-            df_fire['날짜'] = pd.to_datetime(df_fire['날짜'], errors='coerce')
-            df_fire = df_fire.dropna(subset=['날짜', '점수'])
-            if not df_fire.empty:
-                chart_df = df_fire.groupby('날짜')['점수'].mean().reset_index()
-                chart_df['합격선(60점)'] = FIRE_BENCHMARK
-                chart_df = chart_df.set_index('날짜')
-                chart_df.rename(columns={'점수': '내 점수'}, inplace=True)
-                st.line_chart(chart_df[['내 점수', '합격선(60점)']])
+            last_f, prev_f = get_latest_and_prev(df_fire, '점수', 0)
+            render_metric("최근 소방학 점수", f"{last_f:.1f}점", last_f - prev_f, "점", reverse=False)
+    
+    st.info(f"🎯 목표 합격선: {FIRE_BENCHMARK}점 (고정)", icon=":material/flag:")
 
     c_f1, c_f2 = st.columns(2)
     with c_f1:
@@ -411,23 +398,13 @@ with tab1:
     st.markdown("#### 4단계: 실전 모의고사")
     
     EM_BENCHMARK = 60
-    st.info("🎯 목표 합격선: 60점 (고정)", icon=":material/flag:")
-    
-    if not df_mock.empty and '과목' in df_mock.columns:
+    if not df_mock.empty:
         df_em = df_mock[df_mock['과목'] == '응급처치학개론'].copy()
         if not df_em.empty:
-            last_e, avg_e = get_latest_and_avg(df_em, '점수', 0)
-            diff_e = last_e - EM_BENCHMARK
-            st.metric(label="최근 모의고사 점수", value=f"{last_e:.1f}점", delta=f"{diff_e:.1f}점 (합격선 대비)")
-
-            df_em['날짜'] = pd.to_datetime(df_em['날짜'], errors='coerce')
-            df_em = df_em.dropna(subset=['날짜', '점수'])
-            if not df_em.empty:
-                chart_df_e = df_em.groupby('날짜')['점수'].mean().reset_index()
-                chart_df_e['합격선(60점)'] = EM_BENCHMARK
-                chart_df_e = chart_df_e.set_index('날짜')
-                chart_df_e.rename(columns={'점수': '내 점수'}, inplace=True)
-                st.line_chart(chart_df_e[['내 점수', '합격선(60점)']])
+            last_e, prev_e = get_latest_and_prev(df_em, '점수', 0)
+            render_metric("최근 응급처치 점수", f"{last_e:.1f}점", last_e - prev_e, "점", reverse=False)
+            
+    st.info(f"🎯 목표 합격선: {EM_BENCHMARK}점 (고정)", icon=":material/flag:")
 
     c_e1, c_e2 = st.columns(2)
     with c_e1:
@@ -454,6 +431,15 @@ with tab1:
 
 # TAB 2: 러닝 기록
 with tab2:
+    st.markdown("### :material/monitoring: 러닝 지표 (직전 비교)")
+    if not df_run.empty:
+        last_hr, prev_hr = get_latest_and_prev(df_run, '평균심박', 0)
+        last_cad, prev_cad = get_latest_and_prev(df_run, '케이던스', 0)
+        c_r1, c_r2 = st.columns(2)
+        with c_r1: render_metric("평균 심박수", f"{last_hr:.0f}bpm", last_hr - prev_hr, "bpm", reverse=True) # 심박수 감소=빨강
+        with c_r2: render_metric("케이던스", f"{last_cad:.0f}spm", last_cad - prev_cad, "spm", reverse=False) # 케이던스 상승=빨강
+    
+    st.write("---")
     c1, c2 = st.columns(2)
     with c1:
         run_date = st.date_input("훈련 날짜", today_kst, key="run_date_in")
@@ -492,31 +478,23 @@ with tab2:
         st.rerun()
 
     st.write("---")
-    st.markdown("### :material/monitoring: 트렌드 분석")
-    if not df_run.empty and '날짜' in df_run.columns:
-        run_chart = df_run.copy()
-        run_chart['날짜'] = pd.to_datetime(run_chart['날짜'], errors='coerce')
-        run_chart = run_chart.dropna(subset=['날짜'])
-        if not run_chart.empty:
-            run_chart = run_chart.sort_values('날짜').set_index('날짜')
-            if '체중' in run_chart.columns: st.line_chart(run_chart['체중'])
-            if 'VO2Max' in run_chart.columns: st.line_chart(run_chart['VO2Max'])
-
     with st.expander("🏃‍♂️ 러닝 전체 기록 보기/관리"):
         manage_records("Run", df_run, "러닝", "run")
 
 # TAB 3: 체력학원 기록
 with tab3:
     df_gym = load_gym_data()
+    st.markdown("#### :material/show_chart: 최근 측정 기록 (직전 비교)")
+    
     if not df_gym.empty:
-        st.markdown("#### 최근 측정 기록")
-        last_grip, avg_grip = get_latest_and_avg(df_gym, '악력', 0)
-        last_sit, avg_sit = get_latest_and_avg(df_gym, '좌전굴', 0)
-        last_shut, avg_shut = get_latest_and_avg(df_gym, '왕오달', 0)
+        last_grip, prev_grip = get_latest_and_prev(df_gym, '악력', 0)
+        last_sit, prev_sit = get_latest_and_prev(df_gym, '좌전굴', 0)
+        last_shut, prev_shut = get_latest_and_prev(df_gym, '왕오달', 0)
+        
         gc1, gc2, gc3 = st.columns(3)
-        gc1.metric("악력", f"{last_grip}kg", f"{last_grip - avg_grip:.1f}")
-        gc2.metric("좌전굴", f"{last_sit}cm", f"{last_sit - avg_sit:.1f}")
-        gc3.metric("왕오달", f"{last_shut}회", f"{last_shut - avg_shut:.1f}")
+        with gc1: render_metric("악력", f"{last_grip}kg", last_grip - prev_grip, "kg", reverse=False)
+        with gc2: render_metric("좌전굴", f"{last_sit}cm", last_sit - prev_sit, "cm", reverse=False)
+        with gc3: render_metric("왕오달", f"{last_shut}회", last_shut - prev_shut, "회", reverse=False)
         st.write("---")
 
     gym_date = st.date_input("측정 날짜", today_kst, key="gym_date_tab3")
@@ -545,20 +523,6 @@ with tab3:
         st.rerun()
 
     st.write("---")
-    st.markdown("### :material/show_chart: 성장 궤적")
-    if not df_gym.empty and '날짜' in df_gym.columns:
-        gym_chart = df_gym.copy()
-        gym_chart['날짜'] = pd.to_datetime(gym_chart['날짜'], errors='coerce')
-        gym_chart = gym_chart.dropna(subset=['날짜'])
-        if not gym_chart.empty:
-            gym_chart = gym_chart.sort_values('날짜').set_index('날짜')
-            cols_gym1 = [c for c in ['악력', '배근력'] if c in gym_chart.columns]
-            if cols_gym1: st.line_chart(gym_chart[cols_gym1])
-            cols_gym2 = [c for c in ['좌전굴', '제멀'] if c in gym_chart.columns]
-            if cols_gym2: st.line_chart(gym_chart[cols_gym2])
-            cols_gym3 = [c for c in ['왕오달', '윗몸'] if c in gym_chart.columns]
-            if cols_gym3: st.line_chart(gym_chart[cols_gym3])
-
     with st.expander("🏋️ 체력 전체 기록 보기/관리"):
         manage_records("Gym", df_gym, "체력", "gym")
 
