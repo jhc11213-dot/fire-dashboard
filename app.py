@@ -75,18 +75,28 @@ def parse_sheet_data(ws_name, cols):
 # --- 🚀 데이터 읽기 ---
 @st.cache_data(ttl=60)
 def load_run_data():
-    cols = ["날짜", "근무", "컨디션", "체중", "VO2Max", "장비", "타겟", "평균심박", "최대심박", "케이던스", "메모"]
-    return parse_sheet_data("Run", cols)
+    # 💡 거리, 시간 항목 추가!
+    cols = ["날짜", "근무", "컨디션", "체중", "VO2Max", "장비", "타겟", "거리", "시간", "평균심박", "최대심박", "케이던스", "메모"]
+    df = parse_sheet_data("Run", cols)
+    if '체중' in df.columns: df['체중'] = pd.to_numeric(df['체중'], errors='coerce')
+    if 'VO2Max' in df.columns: df['VO2Max'] = pd.to_numeric(df['VO2Max'], errors='coerce')
+    if '거리' in df.columns: df['거리'] = pd.to_numeric(df['거리'], errors='coerce')
+    return df
 
 @st.cache_data(ttl=60)
 def load_gym_data():
     cols = ["날짜", "악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸", "메모"]
-    return parse_sheet_data("Gym", cols)
+    df = parse_sheet_data("Gym", cols)
+    for col in ["악력", "좌전굴", "왕오달", "제멀", "배근력", "윗몸"]:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
 
 @st.cache_data(ttl=60)
 def load_mock_data():
     cols = ["날짜", "과목", "회차", "점수", "오답노트"]
-    return parse_sheet_data("Mock", cols)
+    df = parse_sheet_data("Mock", cols)
+    df['점수'] = pd.to_numeric(df['점수'], errors='coerce')
+    return df
 
 @st.cache_data(ttl=60)
 def load_study_data():
@@ -120,7 +130,9 @@ def load_plan_data():
 @st.cache_data(ttl=60)
 def load_study_time_data():
     cols = ["날짜", "순공시간", "메모"]
-    return parse_sheet_data("StudyTime", cols)
+    df = parse_sheet_data("StudyTime", cols)
+    df['순공시간'] = pd.to_numeric(df['순공시간'], errors='coerce')
+    return df
 
 # --- 🚀 [중요] 최근 기록 및 직전 기록 추출 함수 ---
 def get_latest_and_prev(df, col_name, default_val=0.0):
@@ -153,24 +165,26 @@ def render_metric(label, val_str, delta_val=None, unit="", reverse=False):
     </div>
     """, unsafe_allow_html=True)
 
-# --- 🗑️ 데이터 에디터 (오류 제로!) ---
+# --- 🗑️ 데이터 에디터 (밀림 현상 & 이름 없는 열 완벽 차단!) ---
 def manage_records(sheet_name, df, title, key_suffix):
     st.markdown(f"#### :material/edit_document: {title} 관리")
     st.caption("💡 표 왼쪽 빈 박스를 체크한 뒤 상단의 '휴지통' 아이콘으로 삭제하세요. (완료 후 반드시 [동기화] 클릭)")
     
-    if df.empty: safe_df = pd.DataFrame(columns=df.columns)
+    if df.empty:
+        safe_df = pd.DataFrame(columns=df.columns)
     else:
         safe_df = df.copy().astype(str).replace(['nan', 'NaT', 'None', '<NA>', 'NaN'], '')
-    
+
     edited_df = st.data_editor(safe_df, num_rows="dynamic", use_container_width=True, key=f"editor_{key_suffix}")
     
     if st.button(f":material/sync: {sheet_name} 시트 동기화", key=f"sync_{key_suffix}", use_container_width=True):
         ws = sheet.worksheet(sheet_name)
-        ws.clear()
+        ws.clear() 
         upload_data = [edited_df.columns.tolist()]
-        if not edited_df.empty: upload_data.extend(edited_df.values.tolist())
+        if not edited_df.empty:
+            upload_data.extend(edited_df.values.tolist())
         try: ws.update(values=upload_data, range_name="A1")
-        except: ws.update("A1", upload_data)
+        except: ws.update("A1", upload_data) 
         st.cache_data.clear()
         st.success("✅ 구글 시트에 깔끔하게 반영 완료!")
         st.rerun()
@@ -431,24 +445,26 @@ with tab1:
 with tab2:
     st.markdown("### :material/monitoring: 러닝 지표 (직전 비교)")
     if not df_run.empty:
+        last_dist, prev_dist = get_latest_and_prev(df_run, '거리', 0.0) # 💡 거리 지표 추가!
         last_hr, prev_hr = get_latest_and_prev(df_run, '평균심박', 0)
         last_cad, prev_cad = get_latest_and_prev(df_run, '케이던스', 0)
-        c_r1, c_r2 = st.columns(2)
-        with c_r1: render_metric("평균 심박수", f"{last_hr:.0f}bpm", last_hr - prev_hr, "bpm", reverse=True) 
-        with c_r2: render_metric("케이던스", f"{last_cad:.0f}spm", last_cad - prev_cad, "spm", reverse=False)
+        c_r1, c_r2, c_r3 = st.columns(3)
+        with c_r1: render_metric("러닝 거리", f"{last_dist:.1f}km", last_dist - prev_dist, "km", reverse=False) 
+        with c_r2: render_metric("평균 심박수", f"{last_hr:.0f}bpm", last_hr - prev_hr, "bpm", reverse=True) 
+        with c_r3: render_metric("케이던스", f"{last_cad:.0f}spm", last_cad - prev_cad, "spm", reverse=False)
     
     st.write("---")
     c1, c2 = st.columns(2)
     with c1:
-        # 🚨 여기서 last_w 변수 적용!
         run_date = st.date_input("훈련 날짜", today_kst, key="run_date_in")
-        weight = st.number_input("체중 (kg)", value=float(last_w), step=0.1, key="run_weight_in")
+        run_dist = st.number_input("러닝 거리 (km)", min_value=0.0, max_value=100.0, value=5.0, step=0.1, key="run_dist_in")
         avg_hr = st.number_input("평균 심박 (bpm)", min_value=60, max_value=200, value=140, key="run_avghr_in")
-        cadence = st.number_input("케이던스 (spm)", min_value=100, max_value=250, value=170, step=1, key="run_cadence_in")
+        weight = st.number_input("체중 (kg)", value=float(last_w), step=0.1, key="run_weight_in")
     with c2:
         duty_type = st.selectbox("근무 패턴", ["데이", "이브닝", "나이트", "더블 (16시간)", "오프"], key="run_duty_in")
-        vo2max = st.number_input("VO2 Max", value=float(last_vo2), step=0.1, key="run_vo2_in")
+        run_time = st.text_input("러닝 시간 (분:초)", value="30:00", key="run_time_in")
         max_hr = st.number_input("최대 심박 (bpm)", min_value=60, max_value=220, value=150, key="run_maxhr_in")
+        vo2max = st.number_input("VO2 Max", value=float(last_vo2), step=0.1, key="run_vo2_in")
 
     shoe_used = st.selectbox("착용 러닝화", ["선택 안함", "아디다스 하이퍼부스트 런", "노바 블라스트 5", "아디제로 에보 SL (1)", "아디제로 에보 SL (2)", "클라우드 몬스터 3 하이퍼"], key="run_shoe_in")
     
@@ -464,7 +480,11 @@ with tab2:
         if img_filename and os.path.exists(img_filename): st.image(img_filename, width=300)
 
     target_hr = st.selectbox("훈련 타겟", ["150bpm 미만 (리커버리)", "159bpm 미만 (크루즈)", "자유 훈련"], key="run_target_in")
+    
+    # 💡 케이던스 입력칸을 아래로 살짝 내렸어 (UI 밸런스)
+    cadence = st.number_input("평균 케이던스 (spm)", min_value=100, max_value=250, value=170, step=1, key="run_cadence_in")
     condition = st.slider("피로도 (1:최악 ~ 5:최상)", 1, 5, 3, key="run_cond_in")
+    
     with st.expander("특이사항"): 
         run_memo = st.text_area("메모", label_visibility="collapsed", key="run_memo_in")
 
@@ -472,7 +492,9 @@ with tab2:
         if "150bpm" in target_hr and max_hr >= 150: st.error("심박 타겟 실패 (150 초과)", icon=":material/warning:")
         elif "159bpm" in target_hr and max_hr >= 160: st.error("심박 타겟 실패 (160 초과)", icon=":material/warning:")
         else: st.success("훈련 완료", icon=":material/check_circle:")
-        sheet.worksheet("Run").append_row([str(run_date), duty_type, condition, weight, vo2max, shoe_used, target_hr, avg_hr, max_hr, cadence, run_memo])
+        
+        # 💡 저장할 때 거리(run_dist)와 시간(run_time)도 포함되도록 수정 완료!
+        sheet.worksheet("Run").append_row([str(run_date), duty_type, condition, weight, vo2max, shoe_used, target_hr, run_dist, run_time, avg_hr, max_hr, cadence, run_memo])
         st.cache_data.clear()
         st.rerun()
 
@@ -534,6 +556,11 @@ with tab4:
     safe_weight = weight if 'weight' in locals() else "-"
     safe_vo2 = vo2max if 'vo2max' in locals() else "-"
     safe_shoe = shoe_used if 'shoe_used' in locals() else "-"
+    
+    # 💡 리포트에도 거리와 시간이 나오도록 연동!
+    safe_dist = run_dist if 'run_dist' in locals() else "0"
+    safe_time = run_time if 'run_time' in locals() else "00:00"
+    
     safe_avg = avg_hr if 'avg_hr' in locals() else "0"
     safe_max = max_hr if 'max_hr' in locals() else "0"
     safe_cadence = cadence if 'cadence' in locals() else "0"
@@ -543,6 +570,7 @@ DATE: {today_kst}
 DUTY: {safe_duty}
 BODY: {safe_weight}kg / VO2Max: {safe_vo2}
 GEAR: {safe_shoe}
+RUN: {safe_dist}km / {safe_time}
 HR: AVG {safe_avg}bpm / MAX {safe_max}bpm
 CADENCE: {safe_cadence}spm
 NOTE: {feedback_memo}""", language="markdown")
